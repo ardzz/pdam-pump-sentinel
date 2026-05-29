@@ -25,7 +25,7 @@ RouteMQ Application (Router → Middleware → Controller → Queue → Worker)
 MLOps (Training → MLflow Registry → Inference → Evidently Drift → Retraining)
 ```
 
-Detail lengkap: lihat [`docs/plans/2026-05-29-pdam-pump-sentinel-design.md`](docs/plans/2026-05-29-pdam-pump-sentinel-design.md).
+Detail lengkap: lihat [`docs/plans/design.md`](docs/plans/design.md).
 
 ## Stack
 
