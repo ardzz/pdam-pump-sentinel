@@ -50,7 +50,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "bootstrap"]
+packages = ["app", "bootstrap", "ml"]
 
 [tool.ruff]
 line-length = 120

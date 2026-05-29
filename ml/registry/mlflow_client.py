@@ -1,0 +1,165 @@
+from __future__ import annotations
+
+import math
+import os
+from collections.abc import Mapping
+from dataclasses import fields, is_dataclass
+from importlib import import_module
+from numbers import Real
+from pathlib import Path
+from typing import Any
+
+MODEL_ARTIFACT_NAME = 'pca_anomaly_model'
+DEFAULT_REGISTERED_MODEL_NAME = 'PumpAD'
+
+
+def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
+    """Log a PCA training run to MLflow when the optional dependency is available.
+
+    The helper intentionally imports MLflow inside the function so importing the
+    training lane does not require a live MLflow installation or server. It logs
+    flat scalar params from the config/result objects, numeric metrics from the
+    result, local artifacts from the result output directory, and the fitted
+    sklearn-compatible detector.
+    """
+
+    try:
+        mlflow = import_module('mlflow')
+        mlflow_sklearn = import_module('mlflow.sklearn')
+    except ImportError:
+        return None
+
+    tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+
+    run_id: str | None = None
+    registered_model_name = _registered_model_name(config)
+
+    with mlflow.start_run() as run:
+        run_id = _run_id(run)
+
+        params = _collect_params(config, result)
+        if params:
+            mlflow.log_params(params)
+
+        metrics = _collect_metrics(result)
+        if metrics:
+            mlflow.log_metrics(metrics)
+
+        output_dir = _result_output_dir(result)
+        if output_dir is not None and output_dir.exists():
+            mlflow.log_artifacts(str(output_dir))
+
+        model_info = mlflow_sklearn.log_model(
+            detector,
+            name=MODEL_ARTIFACT_NAME,
+            registered_model_name=registered_model_name,
+        )
+        _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info)
+
+    return run_id
+
+
+def _registered_model_name(config: Any) -> str | None:
+    if not bool(_lookup(config, 'register_model', False)):
+        return None
+    return str(_lookup(config, 'registered_model_name', DEFAULT_REGISTERED_MODEL_NAME) or DEFAULT_REGISTERED_MODEL_NAME)
+
+
+def _set_model_alias_if_requested(mlflow: Any, config: Any, registered_model_name: str | None, model_info: Any) -> None:
+    alias = _lookup(config, 'alias', None)
+    if not registered_model_name or not alias or not hasattr(mlflow, 'set_registered_model_alias'):
+        return
+
+    version = getattr(model_info, 'registered_model_version', None)
+    if version is None:
+        return
+
+    mlflow.set_registered_model_alias(registered_model_name, str(alias), str(version))
+
+
+def _collect_params(config: Any, result: Any) -> dict[str, str | int | float | bool]:
+    params: dict[str, str | int | float | bool] = {}
+    params.update(_scalar_params(_iter_public_values(config)))
+    params.update(_scalar_params(_iter_public_values(_lookup(result, 'params', {}))))
+
+    excluded_result_fields = {'metrics', 'params', 'output_dir', 'artifact_dir', 'artifacts_dir', 'run_dir'}
+    result_params = ((name, value) for name, value in _iter_public_values(result) if name not in excluded_result_fields)
+    params.update(_scalar_params(result_params))
+    return params
+
+
+def _collect_metrics(result: Any) -> dict[str, float]:
+    return _numeric_metrics(_iter_public_values(_lookup(result, 'metrics', {})))
+
+
+def _result_output_dir(result: Any) -> Path | None:
+    for field_name in ('output_dir', 'artifact_dir', 'artifacts_dir', 'run_dir'):
+        value = _lookup(result, field_name, None)
+        if value:
+            return Path(value)
+    return None
+
+
+def _run_id(run: Any) -> str | None:
+    info = getattr(run, 'info', None)
+    run_id = getattr(info, 'run_id', None) or getattr(run, 'run_id', None)
+    if run_id is None:
+        return None
+    return str(run_id)
+
+
+def _lookup(obj: Any, name: str, default: Any = None) -> Any:
+    if isinstance(obj, Mapping):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
+def _iter_public_values(obj: Any) -> list[tuple[str, Any]]:
+    if obj is None:
+        return []
+    if isinstance(obj, Mapping):
+        return [(str(key), value) for key, value in obj.items() if not str(key).startswith('_')]
+    if is_dataclass(obj) and not isinstance(obj, type):
+        return [(field.name, getattr(obj, field.name)) for field in fields(obj)]
+    as_dict = getattr(obj, '_asdict', None)
+    if callable(as_dict):
+        return _iter_public_values(as_dict())
+    values = getattr(obj, '__dict__', None)
+    if isinstance(values, Mapping):
+        return [(str(key), value) for key, value in values.items() if not str(key).startswith('_')]
+    return []
+
+
+def _scalar_params(values: Any) -> dict[str, str | int | float | bool]:
+    params: dict[str, str | int | float | bool] = {}
+    for name, value in values:
+        normalized = _param_value(value)
+        if normalized is not None:
+            params[name] = normalized
+    return params
+
+
+def _param_value(value: Any) -> str | int | float | bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool | int | float | str):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    return None
+
+
+def _numeric_metrics(values: Any) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    for name, value in values:
+        if isinstance(value, bool) or not isinstance(value, Real):
+            continue
+        metric = float(value)
+        if math.isfinite(metric):
+            metrics[name] = metric
+    return metrics
+
+
+__all__ = ['log_pca_training_run']
