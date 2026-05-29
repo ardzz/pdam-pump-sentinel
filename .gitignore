@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+.uv/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# ML artifacts
+mlruns/
+mlartifacts/
+*.h5
+*.keras
+*.pkl
+*.joblib
+models/*.bin
+
+# Data (large, downloaded separately)
+data/*
+!data/.gitkeep
+!data/README.md
+
+# Logs
+logs/*
+!logs/.gitkeep
+*.log
+
+# Reports
+*.html
+!docs/**/*.html
+drift_reports/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+*~
+
+# Docker
+*.pid
