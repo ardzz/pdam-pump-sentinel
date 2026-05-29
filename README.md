@@ -59,6 +59,8 @@ make replay
 make dashboard
 ```
 
+Demo vertical slice awal: lihat [`docs/demo-vertical-slice.md`](docs/demo-vertical-slice.md).
+
 ## Struktur Project
 
 ```text
