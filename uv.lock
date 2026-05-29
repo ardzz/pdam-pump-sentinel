@@ -2500,7 +2500,7 @@ wheels = [
 [[package]]
 name = "pdam-pump-sentinel"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiomysql" },
     { name = "apscheduler" },
@@ -2543,7 +2543,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "redis", specifier = ">=5.0" },
-    { name = "routemq", extras = ["cli"], specifier = ">=0.17.0" },
+    { name = "routemq", extras = ["cli"], specifier = ">=0.23.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
     { name = "scikit-learn", specifier = ">=1.4" },
     { name = "streamlit", specifier = ">=1.33" },
@@ -3369,7 +3369,7 @@ wheels = [
 
 [[package]]
 name = "routemq"
-version = "0.22.1"
+version = "0.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiomysql" },
@@ -3380,9 +3380,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "sqlalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/44/47/3d86017c2266e2e39e554700ff2d29f46c80c05f6d992ad4ee9d1121067c/routemq-0.22.1.tar.gz", hash = "sha256:5487cfa2260a2725bff4e235c05ab69c5eb9e1538212dc6ec32c758b3e4cb236", size = 723000, upload-time = "2026-05-29T11:09:31.672Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/01/86349f5fce19e481f898b7592ebd6c7dd79dcb6958d9719c4669c7b124e7/routemq-0.23.0.tar.gz", hash = "sha256:4d269e6262776030c3d77c41a131f9bf4b4871353e980fcb3282e60d14fcac31", size = 739775, upload-time = "2026-05-29T21:48:07.517Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/51/3ab2e074518a46077f52a33dced51bfd838ca137dbb8f52d5dc2c023f5be/routemq-0.22.1-py3-none-any.whl", hash = "sha256:9682a014597d0ad15d9527a75cdb36747c52afe6d37630d72bd896b2a70fa4be", size = 89959, upload-time = "2026-05-29T11:09:30.369Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/46/c437aa2f395a356ac20db0569581182ef62c3f7a5731058dfd07c69b5a4e/routemq-0.23.0-py3-none-any.whl", hash = "sha256:60689f51b739b55cbf7a945b0b5333f697522727206ef3c3779ff0d9f2112da2", size = 99333, upload-time = "2026-05-29T21:48:05.868Z" },
 ]
 
 [package.optional-dependencies]
