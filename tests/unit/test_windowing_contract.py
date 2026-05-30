@@ -12,9 +12,9 @@ def _windowing():
     return import_module('ml.features.windowing')
 
 
-def _sensor_frame(tmp_path, row_count=5, anomalies=None):
+def _sensor_frame(tmp_path, row_count=5, anomalies=None, changepoints=None):
     loader = _skab_loader()
-    rows = [['datetime', *loader.SENSOR_COLUMNS, 'anomaly']]
+    rows = [['datetime', *loader.SENSOR_COLUMNS, 'anomaly', 'changepoint']]
     for row_index in range(row_count):
         sensor_values = [
             str(float(row_index * 100 + column_index))
@@ -24,6 +24,7 @@ def _sensor_frame(tmp_path, row_count=5, anomalies=None):
             f'2024-01-01T00:00:0{row_index}Z',
             *sensor_values,
             str(int(anomalies[row_index]) if anomalies else 0),
+            str(int(changepoints[row_index]) if changepoints else 0),
         ])
 
     fixture = tmp_path / 'windowing.csv'
@@ -60,6 +61,21 @@ def test_build_sensor_windows_labels_window_when_any_row_is_anomalous(tmp_path):
     dataset = windowing.build_sensor_windows(frame, window_size=2, stride=2)
 
     assert dataset.labels.tolist() == [0, 1]
+
+
+def test_build_sensor_windows_tracks_changepoints_without_changing_anomaly_labels(tmp_path):
+    windowing = _windowing()
+    frame = _sensor_frame(
+        tmp_path,
+        row_count=4,
+        anomalies=[0, 0, 0, 0],
+        changepoints=[0, 2, 0, 0],
+    )
+
+    dataset = windowing.build_sensor_windows(frame, window_size=2, stride=2)
+
+    assert dataset.labels.tolist() == [0, 0]
+    assert dataset.changepoints.tolist() == [1, 0]
 
 
 def test_build_sensor_windows_uses_final_timestamp_and_drops_incomplete_trailing_window(

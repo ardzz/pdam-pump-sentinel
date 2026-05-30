@@ -10,6 +10,7 @@ from ml.datasets.skab_loader import SENSOR_COLUMNS
 class WindowedSensorDataset:
     features: np.ndarray
     labels: np.ndarray
+    changepoints: np.ndarray
     timestamps: np.ndarray
     sensor_columns: tuple[str, ...]
     window_size: int
@@ -39,16 +40,23 @@ def build_sensor_windows(
 
     sensor_values = frame[list(ordered_sensor_columns)].to_numpy(dtype=float, copy=False)
     anomalies = frame['anomaly'].to_numpy()
+    changepoints = (
+        frame['changepoint'].to_numpy()
+        if 'changepoint' in frame.columns
+        else np.zeros(len(frame), dtype=int)
+    )
     source_timestamps = frame['datetime'].to_numpy()
 
     features = []
     labels = []
+    window_changepoints = []
     timestamps = []
     for start in range(0, len(frame) - window_size + 1, stride):
         stop = start + window_size
         features.append(sensor_values[start:stop].reshape(-1))
         labels.append(int(np.any(anomalies[start:stop] != 0)))
-        timestamps.append(source_timestamps[stop - 1])
+        window_changepoints.append(int(np.any(changepoints[start:stop] != 0)))
+        timestamps.append(_normalize_timestamp(source_timestamps[stop - 1]))
 
     feature_count = window_size * len(ordered_sensor_columns)
     feature_array = (
@@ -60,7 +68,8 @@ def build_sensor_windows(
     return WindowedSensorDataset(
         features=feature_array,
         labels=np.asarray(labels, dtype=int),
-        timestamps=np.asarray(timestamps, dtype=source_timestamps.dtype),
+        changepoints=np.asarray(window_changepoints, dtype=int),
+        timestamps=np.asarray(timestamps, dtype=object),
         sensor_columns=ordered_sensor_columns,
         window_size=window_size,
         stride=stride,
@@ -70,3 +79,9 @@ def build_sensor_windows(
 def _validate_positive_integer(value: int, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f'{name} must be a positive integer')
+
+
+def _normalize_timestamp(value) -> str:
+    isoformat = getattr(value, 'isoformat', None)
+    text = str(isoformat()) if callable(isoformat) else str(value)
+    return text.replace('+00:00', 'Z')
