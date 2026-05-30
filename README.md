@@ -13,7 +13,7 @@ Sistem pemantauan kondisi pompa pada Instalasi Pengolahan Air (IPA) yang:
 - Menjalankan **MLOps continuous training loop**: MLflow registry, Evidently drift monitoring, scheduled retraining, champion-challenger promotion
 - Menampilkan dashboard operator real-time (Streamlit)
 
-Dataset surrogate: **SKAB (Skoltech Anomaly Benchmark)** — water circulation testbed industri nyata.
+Dataset surrogate: **SKAB (Skoltech Anomaly Benchmark)**, public water circulation testbed. SKAB **bukan data operasional PDAM nyata** dan dipakai untuk demo akademik, verifikasi pipeline, serta pengembangan metodologi.
 
 ## Arsitektur 3-Pilar
 
@@ -60,6 +60,7 @@ make dashboard
 ```
 
 Demo vertical slice awal: lihat [`docs/demo-vertical-slice.md`](docs/demo-vertical-slice.md).
+Notebook EDA dan persiapan data SKAB: [`notebooks/skab_eda_and_data_prep.ipynb`](notebooks/skab_eda_and_data_prep.ipynb). Notebook ini mengecek missing policy, timestamp quality, korelasi, distribusi, rolling stats, label ranges/overlay, split manifest metadata/base_dir, held-out test metrics, changepoint separation, dan provenance pada fixture kecil tanpa klaim benchmark.
 
 ## Struktur Project
 

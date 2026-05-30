@@ -4,6 +4,8 @@
 
 Project memakai SKAB sebagai surrogate sistem pompa distribusi air PDAM. Model belajar pola normal multivariate dari vibration, current, pressure, temperature, voltage, dan flow, bukan memakai batas min/max per sensor.
 
+Catatan batasan: SKAB adalah public water circulation testbed, bukan data operasional PDAM nyata. Semua demo dengan `tests/fixtures/skab_tiny.csv` bersifat kontrak pipeline dan ilustrasi akademik, bukan klaim benchmark atau performa lapangan.
+
 Keputusan model:
 
 | Role | Model | Alasan |
@@ -55,13 +57,31 @@ Split harus berbasis file eksperimen, bukan random row shuffle.
 | Validation | normal windows + beberapa anomaly file | tuning threshold dan parameter |
 | Test | held-out anomaly files | evaluasi akhir tanpa leakage |
 
+EDA wajib dijalankan sebelum training. Artefak yang dipakai untuk menilai kesiapan data:
+
+| Artifact | Tujuan metodologis |
+|---|---|
+| `summary.json` dan `report.md` | ringkasan baris, label, rentang waktu, statistik sensor, dan split |
+| `missingness.csv` | missing count/rate per kolom dan validasi missing policy |
+| `timestamp_quality.json` | parsed timestamps, invalid timestamps, duplikasi, monotonicity, cadence, dan max gap |
+| `correlation_matrix.csv` | hubungan antar sensor sebelum PCA |
+| `sensor_distributions.csv` | kuantil p01 sampai p99 dan IQR per sensor |
+| `rolling_statistics.csv` | rolling mean dan rolling std untuk stabilitas temporal |
+| `label_ranges.csv` | range kontigu anomaly dan changepoint |
+| `label_overlay.csv` | overlay timestamp, label, dan sensor untuk audit visual |
+
+Kebijakan missing awal: sensor missing ditolak pada training (`allow_missing=False`). Jika eksperimen masa depan mengizinkan imputasi, jenis imputasi, kolom terdampak, dan dampaknya pada metrik harus dicatat sebagai perubahan metodologi.
+
+Split manifest mendukung metadata `schema_version`, `dataset_kind`, `name`, `base_dir`, dan `notes`. `base_dir` harus relatif terhadap lokasi manifest dan semua entry file harus tetap di bawah `base_dir`. Artifact training menyimpan `split_manifest.json` relatif agar run dapat diaudit tanpa path absolut lokal.
+
 Aturan anti-leakage:
 
 1. Jangan shuffle row lintas file.
 2. Jangan fit scaler pada validation/test.
 3. Jangan pakai `anomaly` atau `changepoint` sebagai fitur.
 4. Jangan memilih threshold dari test set.
-5. Simpan daftar file train/validation/test sebagai artifact MLflow.
+5. Pisahkan `changepoint` dari target anomaly. `changepoint` dipakai sebagai transient mask untuk metrik `_excluding_transient`, bukan label alert utama.
+6. Simpan daftar file train/validation/test, metadata manifest, metrics, dan provenance sebagai artifact MLflow.
 
 Scaler awal:
 
@@ -192,6 +212,14 @@ Metrik wajib:
 | Detection delay | jarak waktu dari anomaly start ke alert pertama |
 | Missed anomaly rate | event anomaly yang tidak terdeteksi |
 
+Kontrak metrik implementasi saat ini:
+
+- `metrics.json` pada split-manifest menaruh metrik validation di top level.
+- Metrik held-out test memakai prefix `test_`, misalnya `test_precision`, `test_recall`, `test_f1`, `test_event_recall`, dan `test_mean_detection_delay_windows`.
+- `event_count`, `event_recall`, `missed_events`, `false_alarm_events`, dan `mean_detection_delay_windows` dihitung dari range kontigu label/prediksi.
+- Suffix `_excluding_transient` berarti metrik dihitung ulang setelah window changepoint dikeluarkan.
+- `metadata.json` menyimpan `metric_protocol`, `test_split_held_out`, detail `split`, `artifact_paths`, dan `provenance`.
+
 Event-level rule:
 
 ```text
@@ -200,6 +228,8 @@ Merge detections separated by <= 10 samples.
 ```
 
 Evaluasi time-series anomaly bisa bias jika hanya memakai point-wise metric. Garg et al. dan Schmidl et al. membahas risiko ini untuk multivariate time-series anomaly detection [R8][R9].
+
+Pada fixture kecil, metrik hanya memastikan kontrak jalan. Metrik tersebut tidak boleh dibandingkan dengan leaderboard SKAB atau dipakai sebagai klaim performa PDAM.
 
 ## Online Inference Design
 
@@ -305,6 +335,8 @@ Monitoring signals:
 | data quality | missing rate, stale timestamp, constant sensor |
 | model quality | F1, precision, recall when labels exist |
 | system health | inference latency, model version, retraining status |
+
+Provenance wajib disimpan untuk setiap run training: konfigurasi, path input, hash file, versi Python, versi paket kunci, artifact paths, dan protocol metrik. Tujuannya agar laporan akademik dapat menjelaskan data apa yang dipakai, bagaimana split dibuat, apakah test benar-benar held-out, dan apakah hasil berasal dari fixture demo atau dataset SKAB lengkap.
 
 Referensi MLOps dipakai untuk membatasi desain pada lifecycle training, model registry, kontrol technical debt, dan kesiapan deployment [R14][R15][R16][R17].
 

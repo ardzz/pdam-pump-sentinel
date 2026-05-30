@@ -7,6 +7,7 @@ Dataset SKAB tidak di-commit ke repo (lihat `.gitignore`). Download manual:
 - Repo: https://github.com/waico/SKAB
 - License: GPL-3.0
 - Kaggle DOI: 10.34740/KAGGLE/DSV/1693952
+- Catatan metodologi: SKAB adalah surrogate public water circulation testbed, bukan data operasional PDAM nyata. Pakai untuk demo akademik, kontrak pipeline, dan validasi metode, bukan klaim performa lapangan PDAM.
 
 ```bash
 git clone https://github.com/waico/SKAB.git /tmp/skab
@@ -42,26 +43,51 @@ uv run python scripts/generate_skab_eda.py --split-manifest data/manifests/skab-
 
 Output CLI berupa JSON berisi path artefak EDA dari API core `ml.datasets.skab_eda.generate_skab_eda_report(input_path, split_manifest_path, output_dir, include_plots)`.
 
+Artefak EDA research-grade yang diharapkan:
+
+- `summary.json`: jumlah baris, label, rentang waktu, statistik sensor, constant-column flags, dan ringkasan split bila ada.
+- `report.md`: laporan ringkas untuk dokumentasi dan demo.
+- `sensor_statistics.csv`: mean, std, min, max, dan kuantil sensor.
+- `missingness.csv`: missing count dan missing rate per kolom. Training memakai kebijakan ketat, sensor kosong ditolak kecuali eksperimen eksplisit mengizinkan missing.
+- `timestamp_quality.json`: jumlah timestamp valid, invalid, duplikat, monotonicity, cadence mode, dan max gap.
+- `correlation_matrix.csv`: korelasi antar sensor untuk membaca redundansi dan hubungan proses.
+- `sensor_distributions.csv`: kuantil p01 sampai p99 dan IQR per sensor.
+- `rolling_statistics.csv`: rolling mean dan rolling std untuk melihat stabilitas sinyal.
+- `label_ranges.csv`: range kontigu untuk `anomaly` dan `changepoint`.
+- `label_overlay.csv`: baris timestamp, label, dan sensor untuk overlay anomaly/changepoint.
+
 ## Split Manifest Training
 
-Training split-manifest memakai daftar file eksplisit, bukan pembagian baris acak dari satu CSV. Simpan manifest sebagai JSON dengan tiga array berikut.
+Training split-manifest memakai daftar file eksplisit, bukan pembagian baris acak dari satu CSV. Simpan manifest sebagai JSON dengan tiga array wajib dan metadata opsional berikut.
 
 ```json
 {
-  "train": ["relative/path/to/normal.csv"],
-  "validation": ["relative/path/to/validation.csv"],
-  "test": ["relative/path/to/test.csv"]
+  "schema_version": 1,
+  "dataset_kind": "skab-surrogate-demo",
+  "name": "skab-demo",
+  "base_dir": "files",
+  "notes": {
+    "purpose": "academic demo, not real PDAM operations"
+  },
+  "train": ["normal.csv"],
+  "validation": ["validation.csv"],
+  "test": ["test.csv"]
 }
 ```
+
+`base_dir` harus relatif terhadap folder manifest dan semua entry split harus tetap berada di bawah `base_dir`. Loader menyimpan `_base_dir` hasil resolve untuk audit lokal, sedangkan artifact `split_manifest.json` menyimpan path relatif agar run dapat direproduksi.
 
 Aturan metodologi:
 
 - Tiap split berisi daftar file. Jangan shuffle baris antar file karena urutan waktu dipakai untuk windowing.
 - Fitur model hanya kolom sensor. Kolom label seperti `anomaly` dan `changepoint` tidak boleh masuk ke fitur.
+- `changepoint` dipakai sebagai transient mask untuk metrik `_excluding_transient`, bukan sebagai target anomaly utama.
 - Fit scaler dan PCA hanya dari window normal pada split `train`.
 - Kalibrasi threshold memakai split `validation`.
-- Evaluasi akhir dilakukan sekali pada split `test` yang ditahan dari fitting dan kalibrasi.
-- Saat MLflow aktif, log manifest dan daftar file ter-resolve sebagai artifact agar run dapat diaudit.
+- Evaluasi akhir dilakukan sekali pada split `test` yang ditahan dari fitting dan kalibrasi. Metrik test memakai prefix `test_`.
+- `metrics.json` mencatat precision, recall, F1, false alarm rate, PR-AUC, ROC-AUC, event recall, missed events, false alarm events, dan detection delay windows.
+- `metadata.json` mencatat `metric_protocol`, `test_split_held_out`, `split`, `artifact_paths`, dan `provenance` berisi konfigurasi, input files, hash, dan versi paket.
+- Saat MLflow aktif, log manifest, daftar file ter-resolve, metrics, metadata, dan provenance sebagai artifact agar run dapat diaudit.
 
 Contoh command split-manifest:
 
