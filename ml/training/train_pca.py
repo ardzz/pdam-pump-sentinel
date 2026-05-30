@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
+from ml.datasets.skab_manifest import SkabSplitManifest, load_skab_split_manifest
 from ml.features.windowing import WindowedSensorDataset, build_sensor_windows
 from ml.training.pca_detector import PcaT2QDetector
 
@@ -20,11 +21,12 @@ class PcaTrainingConfig:
     input_path: Path
     output_dir: Path
     validation_input_path: Path | None = None
+    split_manifest_path: Path | None = None
     window_size: int = 60
     stride: int = 1
     n_components: int | float | None = 0.9
     threshold_quantile: float = 0.95
-    scaler: str | None = 'standard'
+    scaler: str | None = 'robust'
     log_mlflow: bool = False
     register_model: bool = False
     registered_model_name: str = 'PumpAD'
@@ -61,6 +63,9 @@ def main(argv: Sequence[str] | None = None) -> PcaTrainingResult:
 
 
 def _fit_and_write_artifacts(config: PcaTrainingConfig) -> tuple[PcaTrainingResult, PcaT2QDetector]:
+    if config.split_manifest_path is not None:
+        return _fit_and_write_artifacts_split(config)
+
     training_windows = _load_windows(config.input_path, config)
     validation_path = config.validation_input_path or config.input_path
     scoring_windows = training_windows if validation_path == config.input_path else _load_windows(validation_path, config)
@@ -116,22 +121,122 @@ def _fit_and_write_artifacts(config: PcaTrainingConfig) -> tuple[PcaTrainingResu
     return result, detector
 
 
+def _fit_and_write_artifacts_split(config: PcaTrainingConfig) -> tuple[PcaTrainingResult, PcaT2QDetector]:
+    split_manifest_path = config.split_manifest_path
+    if split_manifest_path is None:
+        raise ValueError('split_manifest_path is required for split-manifest training')
+    manifest = load_skab_split_manifest(split_manifest_path)
+
+    train_windows = _load_windows_multi(manifest.train, config)
+    validation_windows = _load_windows_multi(manifest.validation, config)
+    test_windows = _load_windows_multi(manifest.test, config) if manifest.test else None
+
+    train_normal_mask = train_windows.labels == 0
+    train_normal_features = train_windows.features[train_normal_mask]
+    if len(train_normal_features) == 0:
+        raise ValueError('training input must contain at least one normal window')
+    if len(validation_windows.features) == 0:
+        raise ValueError('validation input must produce at least one window')
+
+    detector = PcaT2QDetector(
+        n_components=config.n_components,
+        threshold_quantile=config.threshold_quantile,
+        scaler=config.scaler,
+    ).fit(train_normal_features)
+
+    validation_normal_mask = validation_windows.labels == 0
+    validation_normal_features = validation_windows.features[validation_normal_mask]
+    if len(validation_normal_features) == 0:
+        raise ValueError('validation input must contain at least one normal window')
+    detector.calibrate_thresholds(validation_normal_features)
+
+    thresholds = {
+        't2_threshold': float(detector.t2_threshold_),
+        'q_threshold': float(detector.q_threshold_),
+    }
+
+    val_statistics = detector.transform(validation_windows.features)
+    val_scores = detector.score_samples(validation_windows.features)
+    val_predictions = detector.predict(validation_windows.features)
+    val_labels = validation_windows.labels.astype(int, copy=False)
+
+    val_metrics = _classification_metrics(val_labels, val_predictions)
+
+    metrics = val_metrics | {
+        'sample_count': int(len(val_labels)),
+        'anomaly_count': int(np.count_nonzero(val_labels == 1)),
+        'normal_count': int(np.count_nonzero(val_labels == 0)),
+        'training_sample_count': int(len(train_windows.labels)),
+        'training_normal_count': int(len(train_normal_features)),
+        'train_count': int(len(train_windows.labels)),
+        'validation_count': int(len(validation_windows.labels)),
+        **thresholds,
+    }
+
+    if test_windows is not None and len(test_windows.features) > 0:
+        metrics['test_count'] = int(len(test_windows.labels))
+
+    params = _params(config, train_windows)
+
+    artifact_paths = _artifact_paths_split(config.output_dir, test_windows is not None and len(test_windows.features) > 0)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    val_scores_frame = _scores_frame(validation_windows, val_labels, val_predictions, val_statistics, val_scores)
+
+    _dump_detector(detector, artifact_paths['detector'])
+    val_scores_frame.to_csv(artifact_paths['scores'], index=False)
+
+    if test_windows is not None and len(test_windows.features) > 0:
+        test_statistics = detector.transform(test_windows.features)
+        test_scores = detector.score_samples(test_windows.features)
+        test_predictions = detector.predict(test_windows.features)
+        test_labels = test_windows.labels.astype(int, copy=False)
+        test_scores_frame = _scores_frame(test_windows, test_labels, test_predictions, test_statistics, test_scores)
+        test_scores_frame.to_csv(artifact_paths['test_scores'], index=False)
+
+    _write_json(artifact_paths['split_manifest'], manifest.to_payload())
+
+    result = PcaTrainingResult(
+        output_dir=config.output_dir,
+        artifact_paths=artifact_paths,
+        params=params,
+        metrics=metrics,
+        thresholds=thresholds,
+        sensor_columns=train_windows.sensor_columns,
+    )
+    _write_json(artifact_paths['metrics'], metrics)
+    _write_json(artifact_paths['metadata'], _metadata_payload_split(config, result, manifest, train_windows, validation_windows, test_windows))
+    return result, detector
+
+
 def _parse_args(argv: Sequence[str] | None) -> PcaTrainingConfig:
     parser = argparse.ArgumentParser(description='Train a PCA T²/Q detector from SKAB CSV telemetry.')
-    parser.add_argument('input_path', type=Path)
-    parser.add_argument('output_dir', type=Path)
+    parser.add_argument('paths', type=Path, nargs='+', metavar='PATH')
     parser.add_argument('--validation-input-path', type=Path, default=None)
+    parser.add_argument('--split-manifest', type=Path, default=None)
     parser.add_argument('--window-size', type=int, default=60)
     parser.add_argument('--stride', type=int, default=1)
     parser.add_argument('--n-components', type=_parse_n_components, default=0.9)
     parser.add_argument('--threshold-quantile', type=float, default=0.95)
-    parser.add_argument('--scaler', default='standard')
+    parser.add_argument('--scaler', default='robust')
     parser.add_argument('--log-mlflow', action='store_true')
     parser.add_argument('--register-model', action='store_true')
     parser.add_argument('--registered-model-name', default='PumpAD')
     parser.add_argument('--alias', default=None)
     args = parser.parse_args(argv)
-    return PcaTrainingConfig(**vars(args))
+    args_dict = vars(args)
+    paths = args_dict.pop('paths')
+    if 'split_manifest' in args_dict:
+        args_dict['split_manifest_path'] = args_dict.pop('split_manifest')
+    if args_dict['split_manifest_path'] is not None and len(paths) == 1:
+        args_dict['input_path'] = paths[0]
+        args_dict['output_dir'] = paths[0]
+    elif len(paths) == 2:
+        args_dict['input_path'] = paths[0]
+        args_dict['output_dir'] = paths[1]
+    else:
+        parser.error('expected input_path output_dir, or output_dir with --split-manifest')
+    return PcaTrainingConfig(**args_dict)
 
 
 def _parse_n_components(value: str) -> int | float | None:
@@ -145,11 +250,13 @@ def _parse_n_components(value: str) -> int | float | None:
 
 def _normalize_config(config: PcaTrainingConfig) -> PcaTrainingConfig:
     validation_input_path = Path(config.validation_input_path) if config.validation_input_path is not None else None
+    split_manifest_path = Path(config.split_manifest_path) if config.split_manifest_path is not None else None
     return replace(
         config,
         input_path=Path(config.input_path),
         output_dir=Path(config.output_dir),
         validation_input_path=validation_input_path,
+        split_manifest_path=split_manifest_path,
     )
 
 
@@ -162,6 +269,36 @@ def _load_windows(path: Path, config: PcaTrainingConfig) -> WindowedSensorDatase
     )
 
 
+def _load_windows_multi(paths: list[Path], config: PcaTrainingConfig) -> WindowedSensorDataset:
+    datasets = [_load_windows(p, config) for p in paths]
+    if not datasets:
+        return WindowedSensorDataset(
+            features=np.empty((0, config.window_size * len(SENSOR_COLUMNS)), dtype=float),
+            labels=np.empty((0,), dtype=int),
+            timestamps=np.empty((0,), dtype=object),
+            sensor_columns=tuple(SENSOR_COLUMNS),
+            window_size=config.window_size,
+            stride=config.stride,
+        )
+    return _concat_datasets(datasets)
+
+
+def _concat_datasets(datasets: list[WindowedSensorDataset]) -> WindowedSensorDataset:
+    if len(datasets) == 1:
+        return datasets[0]
+    features = np.vstack([d.features for d in datasets])
+    labels = np.concatenate([d.labels for d in datasets])
+    timestamps = np.concatenate([d.timestamps for d in datasets])
+    return WindowedSensorDataset(
+        features=features,
+        labels=labels,
+        timestamps=timestamps,
+        sensor_columns=datasets[0].sensor_columns,
+        window_size=datasets[0].window_size,
+        stride=datasets[0].stride,
+    )
+
+
 def _artifact_paths(output_dir: Path) -> dict[str, Path]:
     return {
         'detector': output_dir / 'pca_detector.joblib',
@@ -169,6 +306,14 @@ def _artifact_paths(output_dir: Path) -> dict[str, Path]:
         'metrics': output_dir / 'metrics.json',
         'scores': output_dir / 'scores.csv',
     }
+
+
+def _artifact_paths_split(output_dir: Path, has_test: bool) -> dict[str, Path]:
+    paths = _artifact_paths(output_dir)
+    paths['split_manifest'] = output_dir / 'split_manifest.json'
+    if has_test:
+        paths['test_scores'] = output_dir / 'test_scores.csv'
+    return paths
 
 
 def _scores_frame(
@@ -226,6 +371,7 @@ def _params(config: PcaTrainingConfig, training_windows: WindowedSensorDataset) 
         'input_path': str(config.input_path),
         'output_dir': str(config.output_dir),
         'validation_input_path': str(config.validation_input_path) if config.validation_input_path is not None else None,
+        'split_manifest_path': str(config.split_manifest_path) if config.split_manifest_path is not None else None,
         'window_size': config.window_size,
         'stride': config.stride,
         'n_components': config.n_components,
@@ -250,9 +396,30 @@ def _metadata_payload(config: PcaTrainingConfig, result: PcaTrainingResult) -> d
     }
 
 
+def _metadata_payload_split(
+    config: PcaTrainingConfig,
+    result: PcaTrainingResult,
+    manifest: SkabSplitManifest,
+    train_windows: WindowedSensorDataset,
+    validation_windows: WindowedSensorDataset,
+    test_windows: WindowedSensorDataset | None,
+) -> dict[str, Any]:
+    payload = _metadata_payload(config, result)
+    manifest_payload = manifest.to_payload()
+    payload['split'] = {
+        'train_files': manifest_payload['train'],
+        'validation_files': manifest_payload['validation'],
+        'test_files': manifest_payload['test'],
+        'train_count': int(len(train_windows.labels)),
+        'validation_count': int(len(validation_windows.labels)),
+        'test_count': int(len(test_windows.labels)) if test_windows is not None else 0,
+    }
+    return payload
+
+
 def _jsonable_config(config: PcaTrainingConfig) -> dict[str, Any]:
     payload = asdict(config)
-    for key in ('input_path', 'output_dir', 'validation_input_path'):
+    for key in ('input_path', 'output_dir', 'validation_input_path', 'split_manifest_path'):
         value = payload[key]
         payload[key] = str(value) if value is not None else None
     return payload
