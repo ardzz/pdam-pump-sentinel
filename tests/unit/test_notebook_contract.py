@@ -123,3 +123,15 @@ def test_notebook_offline_plotly_cells_exist(notebook):
     timeline_found = any('scores_timeline_plotly_json' in text for text in code_texts)
     assert scatter_found, "Missing scatter plot JSON loading cell"
     assert timeline_found, "Missing timeline plot JSON loading cell"
+
+
+def test_notebook_contains_static_svg_chart_previews(notebook):
+    markdown_text = ''.join(
+        ''.join(cell.get('source', []))
+        for cell in notebook['cells']
+        if cell.get('cell_type') == 'markdown'
+    )
+    assert markdown_text.count('<svg') >= 2
+    assert 'Scatter T²/Q' in markdown_text
+    assert 'Timeline T²/Q/Score' in markdown_text
+    assert 'Preview SVG statis' in markdown_text
