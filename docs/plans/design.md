@@ -207,7 +207,7 @@ SKAB Dataset Replayer
 | Application framework | **RouteMQ** (custom, Python 3.12+) |
 | Database | MySQL 8 (historis sensor + queue jobs) |
 | Cache + queue | Redis 7 (latest readings + active model URI + Redis queue) |
-| ML — Champion | scikit-learn (PCA, StandardScaler) + custom T²/Q calculator |
+| ML — Champion | scikit-learn (PCA, RobustScaler) + custom T²/Q calculator |
 | ML — Challenger | TensorFlow 2.15+ / Keras (LSTM Autoencoder) |
 | Experiment tracking + registry | **MLflow** (SQLite backend untuk demo) |
 | Drift monitoring | **Evidently AI** |
@@ -261,7 +261,7 @@ Kami memilih **PCA T²/Q sebagai champion** dan **LSTM Autoencoder sebagai chall
 
 - **Sliding window**: 60 samples per window (≈1 menit @ 1 Hz)
 - **Stride**: 30 samples (overlap 50%)
-- **Per-sensor normalization**: `StandardScaler` fitted pada training data
+- **Per-sensor normalization**: `RobustScaler` fitted pada normal training data
 - **Rolling statistics tambahan untuk PCA**: mean, std, lag-1, lag-2
 
 ### 7.5 Champion-Challenger Decision Rule

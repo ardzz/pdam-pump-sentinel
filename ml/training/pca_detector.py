@@ -31,7 +31,7 @@ class PcaT2QDetector(BaseEstimator):
         self,
         n_components: int | float | None = 0.9,
         threshold_quantile: float = 0.95,
-        scaler: str | Any | None = 'standard',
+        scaler: str | Any | None = 'robust',
         eigenvalue_floor: float = 1e-12,
     ):
         self.n_components = n_components
@@ -60,6 +60,21 @@ class PcaT2QDetector(BaseEstimator):
         t2, q = self._statistics_from_scaled(X_scaled)
         self.training_t2_ = t2
         self.training_q_ = q
+        self.t2_threshold_ = max(float(np.quantile(t2, quantile)), eigenvalue_floor)
+        self.q_threshold_ = max(float(np.quantile(q, quantile)), eigenvalue_floor)
+        return self
+
+    def calibrate_thresholds(self, X) -> 'PcaT2QDetector':
+        """Recalibrate thresholds from validation-normal features without refitting."""
+        check_is_fitted(self, ('pca_', 'scaler_', 't2_threshold_', 'q_threshold_'))
+        quantile = self._validated_threshold_quantile()
+        eigenvalue_floor = self._validated_eigenvalue_floor()
+        X_checked = check_array(X, dtype=np.float64, ensure_2d=True, estimator=self)
+        if X_checked.shape[1] != self.n_features_in_:
+            msg = f'X has {X_checked.shape[1]} features, but PcaT2QDetector is fitted with {self.n_features_in_}'
+            raise ValueError(msg)
+
+        t2, q = self._statistics_from_scaled(self._transform_scaler(X_checked))
         self.t2_threshold_ = max(float(np.quantile(t2, quantile)), eigenvalue_floor)
         self.q_threshold_ = max(float(np.quantile(q, quantile)), eigenvalue_floor)
         return self
