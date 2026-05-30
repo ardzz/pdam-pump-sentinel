@@ -20,11 +20,13 @@ def _train_pca():
     return import_module('ml.training.train_pca')
 
 
-def _write_skab_csv(path, row_count=24, anomaly_start=None, offset=0.0):
+def _write_skab_csv(path, row_count=24, anomaly_start=None, offset=0.0, changepoint_indices=None):
     sensor_columns = _skab_loader().SENSOR_COLUMNS
+    changepoint_indices = set(changepoint_indices or [])
     rows = [['datetime', *sensor_columns, 'anomaly', 'changepoint']]
     for row_index in range(row_count):
         anomaly = int(anomaly_start is not None and row_index >= anomaly_start)
+        changepoint = int(row_index in changepoint_indices)
         sensor_values = []
         for column_index, _ in enumerate(sensor_columns):
             baseline = 10.0 + offset + row_index * 0.05 + column_index * 0.1
@@ -33,7 +35,7 @@ def _write_skab_csv(path, row_count=24, anomaly_start=None, offset=0.0):
             f'2024-01-01T00:00:{row_index:02d}Z',
             *sensor_values,
             str(anomaly),
-            '0',
+            str(changepoint),
         ])
     path.write_text('\n'.join(';'.join(row) for row in rows) + '\n')
     return path
@@ -87,16 +89,27 @@ def test_train_pca_from_skab_writes_deterministic_artifact_contract(tmp_path):
     assert metadata['sensor_columns'] == _skab_loader().SENSOR_COLUMNS
     assert metadata['artifact_paths']['detector'] == str(output_dir / 'pca_detector.joblib')
     assert metadata['params']['window_size'] == 4
+    assert metadata['metric_protocol']['label_source'] == 'anomaly'
+    assert metadata['metric_protocol']['changepoint_role'] == 'transient_mask_only'
+    assert metadata['provenance']['config']['input_path'] == str(input_path)
+    assert str(input_path) in metadata['provenance']['dataset_hashes']
 
     scores = _pandas().read_csv(result.artifact_paths['scores'])
-    assert list(scores.columns) == ['timestamp', 'label', 'prediction', 't2', 'q', 'score']
+    assert list(scores.columns) == ['timestamp', 'label', 'changepoint', 'prediction', 't2', 'q', 'score']
     assert scores['label'].tolist() == [0, 0, 0, 0, 0, 1]
+    assert scores['changepoint'].tolist() == [0, 0, 0, 0, 0, 0]
 
 
 def test_train_pca_uses_validation_input_for_scoring_when_provided(tmp_path):
     train_pca = _train_pca()
     input_path = _write_skab_csv(tmp_path / 'train.csv', row_count=24)
-    validation_path = _write_skab_csv(tmp_path / 'validation.csv', row_count=12, anomaly_start=8, offset=1.0)
+    validation_path = _write_skab_csv(
+        tmp_path / 'validation.csv',
+        row_count=12,
+        anomaly_start=8,
+        offset=1.0,
+        changepoint_indices=[7],
+    )
     config = train_pca.PcaTrainingConfig(
         input_path=input_path,
         validation_input_path=validation_path,
@@ -119,6 +132,7 @@ def test_train_pca_uses_validation_input_for_scoring_when_provided(tmp_path):
         '2024-01-01T00:00:11Z',
     ]
     assert scores['label'].tolist() == [0, 0, 1]
+    assert scores['changepoint'].tolist() == [0, 1, 0]
 
 
 def test_main_trains_without_starting_mlflow(tmp_path, capsys):
@@ -196,8 +210,8 @@ def test_split_manifest_train_files_loaded_without_cross_file_mixing(tmp_path):
     train_pca = _train_pca()
     train1 = _write_skab_csv(tmp_path / 'train1.csv', row_count=24, offset=0.0)
     train2 = _write_skab_csv(tmp_path / 'train2.csv', row_count=24, offset=100.0)
-    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0)
-    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0)
+    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0, changepoint_indices=[7])
+    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0, changepoint_indices=[8])
     manifest = _write_split_manifest(tmp_path / 'manifest.json', [train1, train2], [val], [test])
 
     config = train_pca.PcaTrainingConfig(
@@ -219,8 +233,8 @@ def test_split_manifest_scaler_pca_fit_uses_train_normal_only(tmp_path, monkeypa
     train_pca = _train_pca()
     train1 = _write_skab_csv(tmp_path / 'train1.csv', row_count=24, anomaly_start=20, offset=0.0)
     train2 = _write_skab_csv(tmp_path / 'train2.csv', row_count=24, anomaly_start=20, offset=100.0)
-    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0)
-    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0)
+    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0, changepoint_indices=[7])
+    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0, changepoint_indices=[8])
     manifest = _write_split_manifest(tmp_path / 'manifest.json', [train1, train2], [val], [test])
 
     fit_calls = []
@@ -333,8 +347,8 @@ def test_split_manifest_metadata_and_metrics_include_split_info(tmp_path):
     train_pca = _train_pca()
     train1 = _write_skab_csv(tmp_path / 'train1.csv', row_count=24, offset=0.0)
     train2 = _write_skab_csv(tmp_path / 'train2.csv', row_count=24, offset=100.0)
-    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0)
-    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0)
+    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0, changepoint_indices=[7])
+    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0, changepoint_indices=[8])
     manifest = _write_split_manifest(tmp_path / 'manifest.json', [train1, train2], [val], [test])
 
     config = train_pca.PcaTrainingConfig(
@@ -356,17 +370,46 @@ def test_split_manifest_metadata_and_metrics_include_split_info(tmp_path):
     assert metadata['split']['train_count'] == 12
     assert metadata['split']['validation_count'] == 3
     assert metadata['split']['test_count'] == 3
+    assert metadata['test_split_held_out'] is True
+    assert metadata['split']['test_split_held_out'] is True
+    assert metadata['metric_protocol']['split_evaluator'] == 'ml.evaluation.metrics.evaluate_split'
+    assert metadata['metric_protocol']['test_metrics_prefix'] == 'test_'
+    assert metadata['provenance']['config']['split_manifest_path'] == str(manifest)
+    provenance_files = {path.rsplit('/', 1)[-1] for path in metadata['provenance']['dataset_hashes']}
+    assert provenance_files == {'manifest.json', 'train1.csv', 'train2.csv', 'val.csv', 'test.csv'}
 
     metrics = json.loads(result.artifact_paths['metrics'].read_text())
     assert metrics['train_count'] == 12
     assert metrics['validation_count'] == 3
     assert metrics['test_count'] == 3
+    assert metrics['sample_count'] == 3
+    assert metrics['anomaly_count'] == 1
+    assert metrics['changepoint_count'] == 1
+    assert metrics['test_sample_count'] == 3
+    assert metrics['test_anomaly_count'] == 1
+    assert metrics['test_changepoint_count'] == 1
+    for metric_name in (
+        'precision',
+        'recall',
+        'f1',
+        'false_alarm_rate',
+        'pr_auc',
+        'roc_auc',
+        'event_count',
+        'event_recall',
+        'missed_events',
+        'false_alarm_events',
+        'mean_detection_delay_windows',
+        'precision_excluding_transient',
+    ):
+        assert metric_name in metrics
+        assert f'test_{metric_name}' in metrics
 
 
 def test_split_manifest_scores_csv_represents_validation_scoring(tmp_path):
     train_pca = _train_pca()
     train1 = _write_skab_csv(tmp_path / 'train1.csv', row_count=24, offset=0.0)
-    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0)
+    val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0, changepoint_indices=[7])
     test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0)
     manifest = _write_split_manifest(tmp_path / 'manifest.json', [train1], [val], [test])
 
@@ -383,14 +426,16 @@ def test_split_manifest_scores_csv_represents_validation_scoring(tmp_path):
 
     scores = _pandas().read_csv(result.artifact_paths['scores'])
     assert len(scores) == 3
+    assert list(scores.columns) == ['timestamp', 'label', 'changepoint', 'prediction', 't2', 'q', 'score']
     assert scores['label'].tolist() == [0, 0, 1]
+    assert scores['changepoint'].tolist() == [0, 1, 0]
 
 
 def test_split_manifest_test_scores_csv_exists_when_test_has_files(tmp_path):
     train_pca = _train_pca()
     train1 = _write_skab_csv(tmp_path / 'train1.csv', row_count=24, offset=0.0)
     val = _write_skab_csv(tmp_path / 'val.csv', row_count=12, anomaly_start=8, offset=200.0)
-    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0)
+    test = _write_skab_csv(tmp_path / 'test.csv', row_count=12, anomaly_start=8, offset=300.0, changepoint_indices=[8])
     manifest = _write_split_manifest(tmp_path / 'manifest.json', [train1], [val], [test])
 
     config = train_pca.PcaTrainingConfig(
@@ -409,7 +454,8 @@ def test_split_manifest_test_scores_csv_exists_when_test_has_files(tmp_path):
     assert test_scores_path.exists()
     test_scores = _pandas().read_csv(test_scores_path)
     assert len(test_scores) == 3
-    assert list(test_scores.columns) == ['timestamp', 'label', 'prediction', 't2', 'q', 'score']
+    assert list(test_scores.columns) == ['timestamp', 'label', 'changepoint', 'prediction', 't2', 'q', 'score']
+    assert test_scores['changepoint'].tolist() == [0, 0, 1]
 
 
 def test_split_manifest_duplicate_files_fail_before_fitting(tmp_path):

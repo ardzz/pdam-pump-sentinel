@@ -12,8 +12,28 @@ import numpy as np
 
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.datasets.skab_manifest import SkabSplitManifest, load_skab_split_manifest
+from ml.evaluation.metrics import evaluate_split
 from ml.features.windowing import WindowedSensorDataset, build_sensor_windows
 from ml.training.pca_detector import PcaT2QDetector
+from ml.utils.provenance import collect_provenance
+
+_METRIC_PROTOCOL = {
+    'schema_version': 1,
+    'label_source': 'anomaly',
+    'window_label_rule': 'label=1 when any nonzero anomaly occurs inside the window',
+    'changepoint_source': 'changepoint',
+    'window_changepoint_rule': 'changepoint=1 when any nonzero changepoint occurs inside the window',
+    'changepoint_role': 'transient_mask_only',
+    'split_evaluator': 'ml.evaluation.metrics.evaluate_split',
+    'validation_metrics': 'top-level metrics are validation metrics for split-manifest training',
+    'test_metrics_prefix': 'test_',
+    'threshold_calibration': 'split-manifest thresholds use validation windows with anomaly label 0 only',
+    'threshold_free_metrics': ['pr_auc', 'roc_auc'],
+    'event_metrics': ['event_count', 'event_recall', 'missed_events', 'false_alarm_events', 'mean_detection_delay_windows'],
+    'transient_exclusion_suffix': '_excluding_transient',
+    'point_adjusted_metrics': False,
+    'nab_metrics': False,
+}
 
 
 @dataclass(frozen=True)
@@ -38,7 +58,7 @@ class PcaTrainingResult:
     output_dir: Path
     artifact_paths: dict[str, Path]
     params: dict[str, Any]
-    metrics: dict[str, int | float]
+    metrics: dict[str, Any]
     thresholds: dict[str, float]
     sensor_columns: tuple[str, ...]
 
@@ -91,10 +111,8 @@ def _fit_and_write_artifacts(config: PcaTrainingConfig) -> tuple[PcaTrainingResu
         't2_threshold': float(detector.t2_threshold_),
         'q_threshold': float(detector.q_threshold_),
     }
-    metrics = _classification_metrics(labels, predictions) | {
-        'sample_count': int(len(labels)),
-        'anomaly_count': int(np.count_nonzero(labels == 1)),
-        'normal_count': int(np.count_nonzero(labels == 0)),
+    metrics = evaluate_split(labels, predictions, scores, transient_mask=scoring_windows.changepoints) | {
+        **_count_metrics(labels, scoring_windows.changepoints),
         'training_sample_count': int(len(training_windows.labels)),
         'training_normal_count': int(len(normal_features)),
         **thresholds,
@@ -117,7 +135,7 @@ def _fit_and_write_artifacts(config: PcaTrainingConfig) -> tuple[PcaTrainingResu
         sensor_columns=training_windows.sensor_columns,
     )
     _write_json(artifact_paths['metrics'], metrics)
-    _write_json(artifact_paths['metadata'], _metadata_payload(config, result))
+    _write_json(artifact_paths['metadata'], _metadata_payload(config, result, _non_split_input_files(config)))
     return result, detector
 
 
@@ -160,12 +178,15 @@ def _fit_and_write_artifacts_split(config: PcaTrainingConfig) -> tuple[PcaTraini
     val_predictions = detector.predict(validation_windows.features)
     val_labels = validation_windows.labels.astype(int, copy=False)
 
-    val_metrics = _classification_metrics(val_labels, val_predictions)
+    val_metrics = evaluate_split(
+        val_labels,
+        val_predictions,
+        val_scores,
+        transient_mask=validation_windows.changepoints,
+    )
 
     metrics = val_metrics | {
-        'sample_count': int(len(val_labels)),
-        'anomaly_count': int(np.count_nonzero(val_labels == 1)),
-        'normal_count': int(np.count_nonzero(val_labels == 0)),
+        **_count_metrics(val_labels, validation_windows.changepoints),
         'training_sample_count': int(len(train_windows.labels)),
         'training_normal_count': int(len(train_normal_features)),
         'train_count': int(len(train_windows.labels)),
@@ -191,6 +212,14 @@ def _fit_and_write_artifacts_split(config: PcaTrainingConfig) -> tuple[PcaTraini
         test_scores = detector.score_samples(test_windows.features)
         test_predictions = detector.predict(test_windows.features)
         test_labels = test_windows.labels.astype(int, copy=False)
+        test_metrics = evaluate_split(
+            test_labels,
+            test_predictions,
+            test_scores,
+            transient_mask=test_windows.changepoints,
+        )
+        metrics.update({f'test_{name}': value for name, value in test_metrics.items()})
+        metrics.update(_count_metrics(test_labels, test_windows.changepoints, prefix='test_'))
         test_scores_frame = _scores_frame(test_windows, test_labels, test_predictions, test_statistics, test_scores)
         test_scores_frame.to_csv(artifact_paths['test_scores'], index=False)
 
@@ -205,7 +234,10 @@ def _fit_and_write_artifacts_split(config: PcaTrainingConfig) -> tuple[PcaTraini
         sensor_columns=train_windows.sensor_columns,
     )
     _write_json(artifact_paths['metrics'], metrics)
-    _write_json(artifact_paths['metadata'], _metadata_payload_split(config, result, manifest, train_windows, validation_windows, test_windows))
+    _write_json(
+        artifact_paths['metadata'],
+        _metadata_payload_split(config, result, manifest, train_windows, validation_windows, test_windows),
+    )
     return result, detector
 
 
@@ -275,6 +307,7 @@ def _load_windows_multi(paths: list[Path], config: PcaTrainingConfig) -> Windowe
         return WindowedSensorDataset(
             features=np.empty((0, config.window_size * len(SENSOR_COLUMNS)), dtype=float),
             labels=np.empty((0,), dtype=int),
+            changepoints=np.empty((0,), dtype=int),
             timestamps=np.empty((0,), dtype=object),
             sensor_columns=tuple(SENSOR_COLUMNS),
             window_size=config.window_size,
@@ -288,10 +321,12 @@ def _concat_datasets(datasets: list[WindowedSensorDataset]) -> WindowedSensorDat
         return datasets[0]
     features = np.vstack([d.features for d in datasets])
     labels = np.concatenate([d.labels for d in datasets])
+    changepoints = np.concatenate([d.changepoints for d in datasets])
     timestamps = np.concatenate([d.timestamps for d in datasets])
     return WindowedSensorDataset(
         features=features,
         labels=labels,
+        changepoints=changepoints,
         timestamps=timestamps,
         sensor_columns=datasets[0].sensor_columns,
         window_size=datasets[0].window_size,
@@ -328,6 +363,7 @@ def _scores_frame(
         {
             'timestamp': dataset.timestamps.astype(str),
             'label': labels.astype(int),
+            'changepoint': dataset.changepoints.astype(int),
             'prediction': predictions.astype(int),
             't2': statistics[:, 0].astype(float),
             'q': statistics[:, 1].astype(float),
@@ -336,29 +372,13 @@ def _scores_frame(
     )
 
 
-def _classification_metrics(labels: np.ndarray, predictions: np.ndarray) -> dict[str, float]:
-    positive = labels == 1
-    negative = labels == 0
-    predicted_positive = predictions == 1
-    predicted_negative = predictions == 0
-
-    true_positive = int(np.count_nonzero(predicted_positive & positive))
-    false_positive = int(np.count_nonzero(predicted_positive & negative))
-    false_negative = int(np.count_nonzero(predicted_negative & positive))
-    true_negative = int(np.count_nonzero(predicted_negative & negative))
-
-    precision = _safe_divide(true_positive, true_positive + false_positive)
-    recall = _safe_divide(true_positive, true_positive + false_negative)
+def _count_metrics(labels: np.ndarray, changepoints: np.ndarray, prefix: str = '') -> dict[str, int]:
     return {
-        'precision': precision,
-        'recall': recall,
-        'f1': _safe_divide(2.0 * precision * recall, precision + recall),
-        'false_alarm_rate': _safe_divide(false_positive, false_positive + true_negative),
+        f'{prefix}sample_count': int(len(labels)),
+        f'{prefix}anomaly_count': int(np.count_nonzero(labels == 1)),
+        f'{prefix}normal_count': int(np.count_nonzero(labels == 0)),
+        f'{prefix}changepoint_count': int(np.count_nonzero(changepoints == 1)),
     }
-
-
-def _safe_divide(numerator: float, denominator: float) -> float:
-    return float(numerator / denominator) if denominator else 0.0
 
 
 def _dump_detector(detector: PcaT2QDetector, path: Path) -> None:
@@ -385,7 +405,11 @@ def _params(config: PcaTrainingConfig, training_windows: WindowedSensorDataset) 
     }
 
 
-def _metadata_payload(config: PcaTrainingConfig, result: PcaTrainingResult) -> dict[str, Any]:
+def _metadata_payload(
+    config: PcaTrainingConfig,
+    result: PcaTrainingResult,
+    provenance_input_files: Sequence[Path],
+) -> dict[str, Any]:
     return {
         'params': result.params,
         'metrics': result.metrics,
@@ -393,6 +417,8 @@ def _metadata_payload(config: PcaTrainingConfig, result: PcaTrainingResult) -> d
         'sensor_columns': list(result.sensor_columns),
         'artifact_paths': {name: str(path) for name, path in result.artifact_paths.items()},
         'config': _jsonable_config(config),
+        'metric_protocol': _METRIC_PROTOCOL,
+        'provenance': collect_provenance(config=config, input_files=provenance_input_files),
     }
 
 
@@ -404,8 +430,10 @@ def _metadata_payload_split(
     validation_windows: WindowedSensorDataset,
     test_windows: WindowedSensorDataset | None,
 ) -> dict[str, Any]:
-    payload = _metadata_payload(config, result)
+    payload = _metadata_payload(config, result, _split_input_files(config, manifest))
     manifest_payload = manifest.to_payload()
+    has_held_out_test = test_windows is not None and len(test_windows.features) > 0
+    payload['test_split_held_out'] = has_held_out_test
     payload['split'] = {
         'train_files': manifest_payload['train'],
         'validation_files': manifest_payload['validation'],
@@ -413,8 +441,36 @@ def _metadata_payload_split(
         'train_count': int(len(train_windows.labels)),
         'validation_count': int(len(validation_windows.labels)),
         'test_count': int(len(test_windows.labels)) if test_windows is not None else 0,
+        'test_split_held_out': has_held_out_test,
     }
     return payload
+
+
+def _non_split_input_files(config: PcaTrainingConfig) -> list[Path]:
+    paths = [config.input_path]
+    if config.validation_input_path is not None:
+        paths.append(config.validation_input_path)
+    return _unique_paths(paths)
+
+
+def _split_input_files(config: PcaTrainingConfig, manifest: SkabSplitManifest) -> list[Path]:
+    paths: list[Path] = []
+    if config.split_manifest_path is not None:
+        paths.append(config.split_manifest_path)
+    paths.extend([*manifest.train, *manifest.validation, *manifest.test])
+    return _unique_paths(paths)
+
+
+def _unique_paths(paths: Sequence[Path]) -> list[Path]:
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(path)
+    return unique
 
 
 def _jsonable_config(config: PcaTrainingConfig) -> dict[str, Any]:
