@@ -4,9 +4,11 @@ import csv
 import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
+from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
@@ -65,6 +67,7 @@ _ARTIFACT_FILENAMES = {
 _PLOT_ARTIFACT_FILENAMES = {
     'label_overlay_plot_json': 'label_overlay_plot.json',
     'label_overlay_plot_html': 'label_overlay_plot.html',
+    'correlation_heatmap_png': 'correlation_heatmap.png',
 }
 
 _SENSOR_STAT_COLUMNS = [
@@ -730,6 +733,45 @@ def _write_label_overlay_plot_artifacts(result: SkabEdaResult, json_path: Path, 
     html_path.write_text(html, encoding='utf-8')
 
 
+def _correlation_matrix_frame(result: SkabEdaResult) -> pd.DataFrame:
+    data = {
+        row_sensor: {
+            col_sensor: result.correlation_matrix.get(row_sensor, {}).get(col_sensor)
+            for col_sensor in result.sensor_columns
+        }
+        for row_sensor in result.sensor_columns
+    }
+    correlation = pd.DataFrame.from_dict(data, orient='index')
+    return correlation.reindex(index=result.sensor_columns, columns=result.sensor_columns).astype(float)
+
+
+def _write_correlation_heatmap_png(result: SkabEdaResult, path: Path) -> None:
+    sns = cast(Any, import_module('seaborn'))
+    plt.switch_backend('Agg')
+    correlation = _correlation_matrix_frame(result)
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(
+        correlation,
+        annot=True,
+        cmap='coolwarm',
+        fmt='.2f',
+        square=True,
+        vmin=-1.0,
+        vmax=1.0,
+        linewidths=0.5,
+        cbar_kws={'label': 'Pearson r'},
+        ax=ax,
+    )
+    ax.set_title('SKAB sensor correlation heatmap')
+    ax.set_xlabel('Sensor')
+    ax.set_ylabel('Sensor')
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    fig.tight_layout()
+    fig.savefig(path, dpi=200, bbox_inches='tight', metadata={'Software': 'pdam-pump-sentinel'})
+    plt.close(fig)
+
+
 def write_skab_eda_report(result: SkabEdaResult, output_dir: Path, include_plots: bool = False) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -759,6 +801,7 @@ def write_skab_eda_report(result: SkabEdaResult, output_dir: Path, include_plots
             paths['label_overlay_plot_json'],
             paths['label_overlay_plot_html'],
         )
+        _write_correlation_heatmap_png(result, paths['correlation_heatmap_png'])
 
     report_path = paths['report_md']
     lines = [

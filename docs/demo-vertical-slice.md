@@ -44,7 +44,7 @@ Artefak EDA utama:
 - `summary.json` dan `report.md` untuk ringkasan jumlah baris, label, rentang waktu, dan statistik sensor.
 - `missingness.csv` untuk missing policy aktual. Training default menolak missing sensor.
 - `timestamp_quality.json` untuk parsed timestamps, invalid timestamps, duplicate timestamps, monotonicity, cadence mode, dan max gap.
-- `correlation_matrix.csv`, `sensor_distributions.csv`, dan `rolling_statistics.csv` untuk korelasi, kuantil/IQR, rolling mean, dan rolling std.
+- `correlation_matrix.csv`, `correlation_heatmap.png`, `sensor_distributions.csv`, dan `rolling_statistics.csv` untuk korelasi, heatmap `sns`, kuantil/IQR, rolling mean, dan rolling std.
 - `label_ranges.csv` dan `label_overlay.csv` untuk range anomaly/changepoint dan overlay label terhadap sensor.
 
 ## Training PCA offline

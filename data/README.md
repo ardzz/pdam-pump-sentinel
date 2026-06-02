@@ -51,6 +51,7 @@ Artefak EDA research-grade yang diharapkan:
 - `missingness.csv`: missing count dan missing rate per kolom. Training memakai kebijakan ketat, sensor kosong ditolak kecuali eksperimen eksplisit mengizinkan missing.
 - `timestamp_quality.json`: jumlah timestamp valid, invalid, duplikat, monotonicity, cadence mode, dan max gap.
 - `correlation_matrix.csv`: korelasi antar sensor untuk membaca redundansi dan hubungan proses.
+- `correlation_heatmap.png`: heatmap korelasi berbasis `seaborn`/`sns` saat plot diaktifkan.
 - `sensor_distributions.csv`: kuantil p01 sampai p99 dan IQR per sensor.
 - `rolling_statistics.csv`: rolling mean dan rolling std untuk melihat stabilitas sinyal.
 - `label_ranges.csv`: range kontigu untuk `anomaly` dan `changepoint`.

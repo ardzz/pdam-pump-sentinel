@@ -418,6 +418,7 @@ class TestGenerateSkabEdaReport:
         assert artifacts['input_label_overlay_csv'] == tmp_path / 'label_overlay.csv'
         assert 'input_label_overlay_plot_json' not in artifacts
         assert 'input_label_overlay_plot_html' not in artifacts
+        assert 'input_correlation_heatmap_png' not in artifacts
         assert (tmp_path / 'summary.json').exists()
         assert (tmp_path / 'report.md').exists()
         assert (tmp_path / 'sensor_statistics.csv').exists()
@@ -428,6 +429,7 @@ class TestGenerateSkabEdaReport:
         assert (tmp_path / 'sensor_distributions.csv').exists()
         assert (tmp_path / 'rolling_statistics.csv').exists()
         assert (tmp_path / 'label_overlay.csv').exists()
+        assert not (tmp_path / 'correlation_heatmap.png').exists()
 
     def test_include_plots_true_writes_optional_overlay_plot_artifacts(self, tmp_path):
         import json
@@ -443,12 +445,15 @@ class TestGenerateSkabEdaReport:
 
         assert artifacts['input_label_overlay_plot_json'] == tmp_path / 'label_overlay_plot.json'
         assert artifacts['input_label_overlay_plot_html'] == tmp_path / 'label_overlay_plot.html'
+        assert artifacts['input_correlation_heatmap_png'] == tmp_path / 'correlation_heatmap.png'
         assert artifacts['plots_note'] == 'plots available'
 
         plot_json_path = tmp_path / 'label_overlay_plot.json'
         plot_html_path = tmp_path / 'label_overlay_plot.html'
+        heatmap_path = tmp_path / 'correlation_heatmap.png'
         assert plot_json_path.exists()
         assert plot_html_path.exists()
+        assert heatmap_path.exists()
 
         plot_payload = json.loads(plot_json_path.read_text())
         assert [trace['name'] for trace in plot_payload['data']] == [
@@ -459,6 +464,14 @@ class TestGenerateSkabEdaReport:
         assert plot_payload['layout']['title']['text'] == 'SKAB anomaly/changepoint overlay'
         assert 'generated_at' not in plot_json_path.read_text()
         assert 'Plotly.newPlot' in plot_html_path.read_text()
+
+        first_heatmap_bytes = heatmap_path.read_bytes()
+        assert first_heatmap_bytes.startswith(b'\x89PNG\r\n\x1a\n')
+        assert len(first_heatmap_bytes) > 0
+
+        result = eda.summarize_skab_csv(SKAB_FIXTURE)
+        eda.write_skab_eda_report(result, tmp_path, include_plots=True)
+        assert heatmap_path.read_bytes() == first_heatmap_bytes
 
     def test_writes_split_manifest_artifacts_without_overwriting_input(self, tmp_path):
         import json

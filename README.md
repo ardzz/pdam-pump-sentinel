@@ -60,7 +60,7 @@ make dashboard
 ```
 
 Demo vertical slice awal: lihat [`docs/demo-vertical-slice.md`](docs/demo-vertical-slice.md).
-Notebook EDA dan persiapan data SKAB: [`notebooks/skab_eda_and_data_prep.ipynb`](notebooks/skab_eda_and_data_prep.ipynb). Notebook ini mengecek missing policy, timestamp quality, korelasi, distribusi, rolling stats, label ranges/overlay, split manifest metadata/base_dir, held-out test metrics, changepoint separation, dan provenance pada fixture kecil tanpa klaim benchmark.
+Notebook EDA dan persiapan data SKAB: [`notebooks/skab_eda_and_data_prep.ipynb`](notebooks/skab_eda_and_data_prep.ipynb). Notebook ini mengecek missing policy, timestamp quality, korelasi dan heatmap `sns`, distribusi, rolling stats, label ranges/overlay, split manifest metadata/base_dir, held-out test metrics, changepoint separation, dan provenance pada fixture kecil tanpa klaim benchmark.
 
 ## Struktur Project
 

@@ -185,10 +185,16 @@ def test_skab_notebook_contains_expected_markdown(skab_notebook):
         'missing policy',
         'timestamp quality',
         'correlation_matrix.csv',
+        'Correlation Heatmap',
+        'correlation_heatmap.png',
         'sensor_distributions.csv',
         'rolling_statistics.csv',
         'label_ranges.csv',
         'label_overlay.csv',
+        'Distribusi Sensor',
+        'Boxplot Sensor',
+        'Time Series Sensor',
+        'Label Overlay',
         'split manifest metadata/base_dir',
         'held-out test metrics',
         'event metrics',
@@ -214,6 +220,7 @@ def test_skab_notebook_contains_expected_code_references(skab_notebook):
         'timestamp_quality.json',
         'missingness.csv',
         'correlation_matrix.csv',
+        'correlation_heatmap.png',
         'sensor_distributions.csv',
         'rolling_statistics.csv',
         'label_ranges.csv',
@@ -226,6 +233,13 @@ def test_skab_notebook_contains_expected_code_references(skab_notebook):
         'input_label_ranges_csv',
         'input_label_overlay_csv',
         'SENSOR_COLUMNS',
+        'matplotlib.pyplot as plt',
+        'seaborn as sns',
+        'sns.heatmap',
+        'sns.histplot',
+        'sns.boxplot',
+        'sns.barplot',
+        'plt.show()',
         "'base_dir': 'files'",
         'load_skab_split_manifest',
         'validation_label_ranges_csv',
@@ -252,10 +266,29 @@ def test_skab_notebook_first_cell_is_markdown_intro(skab_notebook):
     assert 'SKAB EDA dan Persiapan Data' in source
 
 
-def test_skab_notebook_contains_static_svg_chart_previews(skab_notebook):
+def test_skab_notebook_renders_inline_eda_charts(skab_notebook):
+    code_text = ''.join(
+        ''.join(cell.get('source', []))
+        for cell in skab_notebook['cells']
+        if cell.get('cell_type') == 'code'
+    )
     markdown_text = ''.join(
         ''.join(cell.get('source', []))
         for cell in skab_notebook['cells']
         if cell.get('cell_type') == 'markdown'
     )
-    assert markdown_text.count('<svg') >= 2
+    expected_charts = [
+        'sns.heatmap',
+        'sns.histplot',
+        'sns.boxplot',
+        'sns.barplot',
+    ]
+    for fragment in expected_charts:
+        assert fragment in code_text, f"Missing EDA chart fragment: {fragment!r}"
+    assert '%matplotlib inline' in code_text, "Inline backend magic required so charts render in-notebook"
+    assert 'np.triu' in code_text, "Correlation heatmap must mask the redundant upper triangle"
+    assert "set_yscale('log')" in code_text, "Rolling-stats chart must use log scale for wide value ranges"
+    assert code_text.count('plt.show()') >= 7, "Expected at least 7 inline-rendered EDA charts"
+    assert 'savefig' not in code_text, "EDA charts must render inline, not be saved to disk"
+    assert 'EDA_PLOT_DIR' not in code_text, "No chart output directory should be created"
+    assert '<svg' not in markdown_text, "Fake static SVG previews must be replaced by real inline charts"

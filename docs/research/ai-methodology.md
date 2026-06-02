@@ -65,6 +65,7 @@ EDA wajib dijalankan sebelum training. Artefak yang dipakai untuk menilai kesiap
 | `missingness.csv` | missing count/rate per kolom dan validasi missing policy |
 | `timestamp_quality.json` | parsed timestamps, invalid timestamps, duplikasi, monotonicity, cadence, dan max gap |
 | `correlation_matrix.csv` | hubungan antar sensor sebelum PCA |
+| `correlation_heatmap.png` | heatmap `sns` untuk audit visual korelasi antar sensor saat plot diaktifkan |
 | `sensor_distributions.csv` | kuantil p01 sampai p99 dan IQR per sensor |
 | `rolling_statistics.csv` | rolling mean dan rolling std untuk stabilitas temporal |
 | `label_ranges.csv` | range kontigu anomaly dan changepoint |
