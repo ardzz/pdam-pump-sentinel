@@ -1,8 +1,17 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
+
+from routemq.telemetry import (  # type: ignore[reportMissingImports]
+    Measurement,
+    SchemaValidationResult,
+    TelemetryAdapter,
+    TelemetryHealthStatus,
+    TelemetryPoint,
+    WriteResult,
+)
 
 logger = logging.getLogger('PDAM.persistence')
 
@@ -19,6 +28,40 @@ def enable_history_persistence(enabled: bool) -> None:
 
 def history_persistence_enabled() -> bool:
     return _history_enabled
+
+
+class SensorReadingTelemetryAdapter(TelemetryAdapter):
+    backend = 'mysql'
+
+    async def write_many(self, points: Sequence[TelemetryPoint]) -> WriteResult:
+        from routemq.model import Model  # type: ignore[reportMissingImports]
+
+        from app.models.sensor_reading import SensorReading
+
+        written = 0
+        for point in points:
+            await Model.create(
+                SensorReading,
+                station=point.device_id,
+                source_timestamp=point.attributes.get('source_timestamp'),
+                sensors={name: Measurement.from_value(measurement).value for name, measurement in point.measurements.items()},
+                score=point.attributes.get('score'),
+                anomaly=point.attributes.get('anomaly'),
+            )
+            written += 1
+        return WriteResult(accepted=len(points), written=written)
+
+    async def validate_schema(self) -> SchemaValidationResult:
+        return SchemaValidationResult()
+
+    async def health_check(self) -> TelemetryHealthStatus:
+        return TelemetryHealthStatus(ok=True, backend=self.backend)
+
+    async def close(self) -> None:
+        return None
+
+
+_history_adapter = SensorReadingTelemetryAdapter()
 
 
 async def persist_telemetry(
@@ -53,18 +96,21 @@ async def _persist_history(
 ) -> None:
     if not _history_enabled:
         return
+    sensors = reading_payload.get('sensors') or {}
+    if not sensors:
+        return
     try:
-        from routemq.model import Model  # type: ignore[reportMissingImports]
-
-        from app.models.sensor_reading import SensorReading
-
-        await Model.create(
-            SensorReading,
-            station=station,
-            source_timestamp=reading_payload.get('timestamp'),
-            sensors=dict(reading_payload.get('sensors') or {}),
-            score=anomaly_payload.get('score'),
-            anomaly=anomaly_payload.get('anomaly'),
+        point = TelemetryPoint(
+            device_id=station,
+            observed_at=None,
+            measurements=dict(sensors),
+            tags={'station': station},
+            attributes={
+                'source_timestamp': reading_payload.get('timestamp'),
+                'score': anomaly_payload.get('score'),
+                'anomaly': anomaly_payload.get('anomaly'),
+            },
         )
+        await _history_adapter.write_many([point])
     except Exception:
         logger.exception('failed to persist sensor reading to MySQL', extra={'station': station})
