@@ -2546,7 +2546,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "redis", specifier = ">=5.0" },
-    { name = "routemq", extras = ["cli"], specifier = ">=0.23.0" },
+    { name = "routemq", extras = ["cli"], specifier = ">=0.24.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
     { name = "scikit-learn", specifier = ">=1.4" },
     { name = "seaborn", specifier = ">=0.13" },
@@ -3373,7 +3373,7 @@ wheels = [
 
 [[package]]
 name = "routemq"
-version = "0.23.0"
+version = "0.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiomysql" },
@@ -3384,9 +3384,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "sqlalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/be/01/86349f5fce19e481f898b7592ebd6c7dd79dcb6958d9719c4669c7b124e7/routemq-0.23.0.tar.gz", hash = "sha256:4d269e6262776030c3d77c41a131f9bf4b4871353e980fcb3282e60d14fcac31", size = 739775, upload-time = "2026-05-29T21:48:07.517Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ce/7c/243e23bdfd792c13e9fa50d88214f3c961eec7fad777ba5d25bf676133b6/routemq-0.24.0.tar.gz", hash = "sha256:c9baeece2eb424e3c3c5c1d95cb25abfc0e95cb2a1c6e1f076c5974ed00cb81a", size = 765273, upload-time = "2026-06-02T10:52:29.435Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bb/46/c437aa2f395a356ac20db0569581182ef62c3f7a5731058dfd07c69b5a4e/routemq-0.23.0-py3-none-any.whl", hash = "sha256:60689f51b739b55cbf7a945b0b5333f697522727206ef3c3779ff0d9f2112da2", size = 99333, upload-time = "2026-05-29T21:48:05.868Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/fe/6c178fdbc6e327d3b9be8e31355c3be787a94339cb6f0a391a19739e412f/routemq-0.24.0-py3-none-any.whl", hash = "sha256:bad3f2d6493a89c2bfd21c77434cce70bb0580305f1656907d9c05f8d3536ad3", size = 110773, upload-time = "2026-06-02T10:52:27.709Z" },
 ]
 
 [package.optional-dependencies]
