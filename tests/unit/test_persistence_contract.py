@@ -1,4 +1,7 @@
 
+from routemq.settings import TelemetrySettings  # type: ignore[reportMissingImports]
+from routemq.telemetry import telemetry  # type: ignore[reportMissingImports]
+
 from app.services import persistence
 
 
@@ -72,9 +75,16 @@ async def test_history_persistence_when_enabled(monkeypatch):
 
     monkeypatch.setattr(model_module.Model, 'create', classmethod(fake_create), raising=True)
     persistence.enable_history_persistence(True)
+    await telemetry.start(
+        adapter=persistence.SensorReadingTelemetryAdapter(),
+        settings=TelemetrySettings(enabled=True),
+    )
     try:
         await persistence.persist_telemetry('ipa_01', _reading(), _anomaly())
+        assert created == []
+        await telemetry.flush()
     finally:
+        await telemetry.close()
         persistence.enable_history_persistence(False)
 
     assert len(created) == 1

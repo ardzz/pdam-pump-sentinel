@@ -11,6 +11,7 @@ from routemq.telemetry import (  # type: ignore[reportMissingImports]
     TelemetryHealthStatus,
     TelemetryPoint,
     WriteResult,
+    telemetry,
 )
 
 logger = logging.getLogger('PDAM.persistence')
@@ -61,9 +62,6 @@ class SensorReadingTelemetryAdapter(TelemetryAdapter):
         return None
 
 
-_history_adapter = SensorReadingTelemetryAdapter()
-
-
 async def persist_telemetry(
     station: str,
     reading_payload: Mapping[str, Any],
@@ -111,6 +109,6 @@ async def _persist_history(
                 'anomaly': anomaly_payload.get('anomaly'),
             },
         )
-        await _history_adapter.write_many([point])
+        await telemetry.write(point)
     except Exception:
         logger.exception('failed to persist sensor reading to MySQL', extra={'station': station})
