@@ -1,6 +1,4 @@
-
 from routemq.settings import TelemetrySettings  # type: ignore[reportMissingImports]
-from routemq.telemetry import telemetry  # type: ignore[reportMissingImports]
 
 from app.services import persistence
 
@@ -50,44 +48,35 @@ async def test_persist_latest_skips_when_redis_disabled(monkeypatch):
 
 
 async def test_history_persistence_disabled_by_default(monkeypatch):
-    created = []
+    points = []
 
-    async def fake_create(model_class, **kwargs):
-        created.append(kwargs)
+    async def fake_write(point):
+        points.append(point)
 
-    import routemq.model as model_module
-
-    monkeypatch.setattr(model_module.Model, 'create', classmethod(lambda cls, mc, **kw: fake_create(mc, **kw)), raising=True)
-    monkeypatch.setattr(persistence, '_history_enabled', False, raising=True)
+    monkeypatch.setattr(persistence.telemetry, 'settings', TelemetrySettings(enabled=False), raising=True)
+    monkeypatch.setattr(persistence.telemetry, 'write', fake_write, raising=True)
 
     await persistence.persist_telemetry('ipa_01', _reading(), _anomaly())
 
-    assert created == []
+    assert points == []
 
 
 async def test_history_persistence_when_enabled(monkeypatch):
-    created = []
+    points = []
 
-    async def fake_create(cls, model_class, **kwargs):
-        created.append({'model': model_class.__name__, **kwargs})
+    async def fake_write(point):
+        points.append(point)
 
-    import routemq.model as model_module
+    monkeypatch.setattr(persistence.telemetry, 'settings', TelemetrySettings(enabled=True), raising=True)
+    monkeypatch.setattr(persistence.telemetry, 'write', fake_write, raising=True)
 
-    monkeypatch.setattr(model_module.Model, 'create', classmethod(fake_create), raising=True)
-    persistence.enable_history_persistence(True)
-    await telemetry.start(
-        adapter=persistence.SensorReadingTelemetryAdapter(),
-        settings=TelemetrySettings(enabled=True),
-    )
-    try:
-        await persistence.persist_telemetry('ipa_01', _reading(), _anomaly())
-        assert created == []
-        await telemetry.flush()
-    finally:
-        await telemetry.close()
-        persistence.enable_history_persistence(False)
+    await persistence.persist_telemetry('ipa_01', _reading(), _anomaly())
 
-    assert len(created) == 1
-    assert created[0]['model'] == 'SensorReading'
-    assert created[0]['station'] == 'ipa_01'
-    assert created[0]['anomaly'] == 1
+    assert len(points) == 1
+    point = points[0]
+    assert point.device_id == 'ipa_01'
+    assert point.measurements['Pressure'].value == 2.1
+    assert point.measurements['score'].value == 0.9
+    assert point.measurements['anomaly'].value == 1
+    assert point.tags == {'station': 'ipa_01'}
+    assert point.attributes['source_timestamp'] == 't0'

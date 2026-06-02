@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any
 
 from dotenv import load_dotenv
@@ -16,11 +15,10 @@ from routemq.mqtt_utils import (  # type: ignore[reportMissingImports]
 )  # type: ignore[reportMissingImports]
 from routemq.router import Router  # type: ignore[reportMissingImports]
 from routemq.router_registry import create_dynamic_router  # type: ignore[reportMissingImports]
-from routemq.settings import TelemetrySettings  # type: ignore[reportMissingImports]
+from routemq.settings import load_telemetry_settings  # type: ignore[reportMissingImports]
 from routemq.telemetry import telemetry  # type: ignore[reportMissingImports]
+from routemq.tsdb.telemetry_adapters import adapter_from_settings  # type: ignore[reportMissingImports]
 from routemq.worker_manager import WorkerManager  # type: ignore[reportMissingImports]
-
-from app.services.persistence import SensorReadingTelemetryAdapter, enable_history_persistence
 
 
 class Application:
@@ -45,12 +43,13 @@ class Application:
         self._telemetry_started = False
 
     async def _initialize_connections(self) -> None:
-        if os.getenv('ENABLE_MYSQL', 'false').lower() != 'true':
+        settings = load_telemetry_settings()
+        if not settings.enabled:
             return
-        enable_history_persistence(True)
+        adapter = adapter_from_settings(settings.connection, settings.url, async_insert=settings.async_insert)
         self._telemetry_started = await telemetry.start(
-            adapter=SensorReadingTelemetryAdapter(),
-            settings=TelemetrySettings(enabled=True),
+            adapter=adapter,
+            settings=settings,
         )
 
     async def _cleanup_connections(self) -> None:

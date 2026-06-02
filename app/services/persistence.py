@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 from routemq.telemetry import (  # type: ignore[reportMissingImports]
-    Measurement,
-    SchemaValidationResult,
-    TelemetryAdapter,
-    TelemetryHealthStatus,
     TelemetryPoint,
-    WriteResult,
     telemetry,
 )
 
@@ -18,48 +13,6 @@ logger = logging.getLogger('PDAM.persistence')
 
 LATEST_READING_KEY = 'pumpad:latest:reading:{station}'
 LATEST_ANOMALY_KEY = 'pumpad:latest:anomaly:{station}'
-
-_history_enabled = False
-
-
-def enable_history_persistence(enabled: bool) -> None:
-    global _history_enabled
-    _history_enabled = bool(enabled)
-
-
-def history_persistence_enabled() -> bool:
-    return _history_enabled
-
-
-class SensorReadingTelemetryAdapter(TelemetryAdapter):
-    backend = 'mysql'
-
-    async def write_many(self, points: Sequence[TelemetryPoint]) -> WriteResult:
-        from routemq.model import Model  # type: ignore[reportMissingImports]
-
-        from app.models.sensor_reading import SensorReading
-
-        written = 0
-        for point in points:
-            await Model.create(
-                SensorReading,
-                station=point.device_id,
-                source_timestamp=point.attributes.get('source_timestamp'),
-                sensors={name: Measurement.from_value(measurement).value for name, measurement in point.measurements.items()},
-                score=point.attributes.get('score'),
-                anomaly=point.attributes.get('anomaly'),
-            )
-            written += 1
-        return WriteResult(accepted=len(points), written=written)
-
-    async def validate_schema(self) -> SchemaValidationResult:
-        return SchemaValidationResult()
-
-    async def health_check(self) -> TelemetryHealthStatus:
-        return TelemetryHealthStatus(ok=True, backend=self.backend)
-
-    async def close(self) -> None:
-        return None
 
 
 async def persist_telemetry(
@@ -92,23 +45,30 @@ async def _persist_history(
     reading_payload: Mapping[str, Any],
     anomaly_payload: Mapping[str, Any],
 ) -> None:
-    if not _history_enabled:
+    if not telemetry.settings.enabled:
         return
-    sensors = reading_payload.get('sensors') or {}
-    if not sensors:
+    measurements: dict[str, Any] = {}
+    sensors = reading_payload.get('sensors')
+    if isinstance(sensors, Mapping):
+        measurements.update(sensors)
+    for name in ('score', 'anomaly'):
+        value = anomaly_payload.get(name)
+        if value is not None:
+            measurements[name] = value
+    if not measurements:
         return
+    attributes: dict[str, str] = {}
+    source_timestamp = reading_payload.get('timestamp')
+    if source_timestamp is not None:
+        attributes['source_timestamp'] = str(source_timestamp)
     try:
         point = TelemetryPoint(
             device_id=station,
             observed_at=None,
-            measurements=dict(sensors),
+            measurements=measurements,
             tags={'station': station},
-            attributes={
-                'source_timestamp': reading_payload.get('timestamp'),
-                'score': anomaly_payload.get('score'),
-                'anomaly': anomaly_payload.get('anomaly'),
-            },
+            attributes=attributes,
         )
         await telemetry.write(point)
     except Exception:
-        logger.exception('failed to persist sensor reading to MySQL', extra={'station': station})
+        logger.exception('failed to emit telemetry history point', extra={'station': station})

@@ -52,6 +52,21 @@ services:
       retries: 10
       start_period: 30s
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.17.2
     command:
@@ -84,6 +99,7 @@ volumes:
   mosquitto-log:
   redis-data:
   mysql-data:
+  clickhouse-data:
   mlflow-data:
 
 networks:

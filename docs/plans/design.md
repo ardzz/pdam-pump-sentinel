@@ -57,7 +57,7 @@ Model anomaly detection yang dilatih sekali akan mengalami **concept drift** sei
 
 ### 3.1 Tujuan Utama
 
-1. Membangun MQTT application framework (**RouteMQ**) sebagai backbone ingestion sensor dengan routing DSL, middleware chain, queue workers, Redis/MySQL integration, dan shared-subscription horizontal scaling.
+1. Membangun MQTT application framework (**RouteMQ**) sebagai backbone ingestion sensor dengan routing DSL, middleware chain, queue workers, Redis/ClickHouse integration, dan shared-subscription horizontal scaling.
 2. Mengimplementasikan multivariate anomaly detection dengan PCA T²/Q (champion) dan LSTM Autoencoder (challenger) pada 8 channel sensor SKAB.
 3. Membangun MLOps loop lengkap: offline training pipeline, MLflow Model Registry, Evidently drift monitoring, scheduled retraining dengan champion-challenger evaluation.
 4. Mendemonstrasikan **continuous training loop** end-to-end: drift detection → retraining trigger → model promotion → hot-swap inference.
@@ -67,7 +67,7 @@ Model anomaly detection yang dilatih sekali akan mengalami **concept drift** sei
 
 Yang harus jalan saat presentasi:
 
-- SKAB CSV replay → MQTT broker → RouteMQ routes → MySQL/Redis persistence
+- SKAB CSV replay → MQTT broker → RouteMQ routes → ClickHouse/Redis persistence
 - PCA champion + LSTM-AE challenger inference jobs
 - Scheduled retraining (30 menit demo cadence)
 - Dashboard Streamlit dengan 4 halaman: live sensors, anomaly history, model registry, drift reports
@@ -151,7 +151,7 @@ SKAB Dataset Replayer
    │    └─ Logging + correlation ID
    ├─ SensorController.ingest()
    │    ├─ Redis: latest reading per sensor (set_json)
-   │    └─ MySQL: append historical row (sensor_readings table)
+   │    └─ ClickHouse: append telemetry observation (`telemetry_observations` table)
    └─ QueueManager.dispatch(AnomalyDetectionJob)
         ↓
 [ QueueWorker (Redis driver) ]
@@ -171,10 +171,10 @@ SKAB Dataset Replayer
 
 ### 5.3 Komponen DevOps Layer
 
-- **Orchestration**: Docker Compose (production-ish) + Compose dev (Redis/MySQL only)
+- **Orchestration**: Docker Compose (production-ish) + Compose dev (Redis/ClickHouse only)
 - **CI/CD**: GitHub Actions — lint (Ruff) + unit tests (unittest) + build images
 - **Observability**: Prometheus metrics scraped dari RouteMQ `observability.py` hooks; Grafana dashboards untuk system metrics + ML metrics (anomaly score, model version, drift score) dalam satu pipeline
-- **Config**: `.env` based environment variables, `ENABLE_REDIS`/`ENABLE_MYSQL` feature flags
+- **Config**: `.env` based environment variables, `ENABLE_REDIS`, `ENABLE_TELEMETRY`, `TELEMETRY_CONNECTION=clickhouse`, dan `TELEMETRY_URL`
 - **Healthchecks**: RouteMQ built-in `/health` dan `/ready` endpoints
 
 ### 5.4 Komponen RouteMQ Application
@@ -205,7 +205,7 @@ SKAB Dataset Replayer
 |---|---|
 | MQTT broker | Eclipse Mosquitto 2.x |
 | Application framework | **RouteMQ** (custom, Python 3.12+) |
-| Database | MySQL 8 (historis sensor + queue jobs) |
+| Telemetry store | ClickHouse 24 (telemetry historis sensor via RouteMQ 0.24 TSDB adapter) |
 | Cache + queue | Redis 7 (latest readings + active model URI + Redis queue) |
 | ML — Champion | scikit-learn (PCA, RobustScaler) + custom T²/Q calculator |
 | ML — Challenger | TensorFlow 2.15+ / Keras (LSTM Autoencoder) |
@@ -292,7 +292,7 @@ else:
 [ APScheduler tick — 30 menit ]
    ↓
 [ RetrainingJob.handle() ]
-   ├─ 1. Fetch sliding window 7 hari dari MySQL
+   ├─ 1. Fetch sliding window 7 hari dari ClickHouse (`telemetry_observations`)
    ├─ 2. Filter "normal-ish" (anomaly_score < threshold)
    ├─ 3. Feature engineering (window builder + normalizer)
    ├─ 4. Train challenger (PCA atau LSTM-AE, alternating)
@@ -487,8 +487,8 @@ pdam-pump-sentinel/
 
 | Minggu | Tema | Deliverable | Demo Akhir Minggu |
 |:---:|---|---|---|
-| **1** | Foundation & Infra | Repo init, Docker Compose stack lengkap (mosquitto + mysql + redis + mlflow + prometheus + grafana), SKAB download script, RouteMQ scaffold, proposal v1 | `docker compose ps` semua services healthy |
-| **2** | Ingestion Pipeline | SKAB replayer publishing 8 channel sensor, sensor router/controller, MySQL schema, Redis cache, middleware suite, Streamlit dashboard v0 (live charts) | Live sensor data flowing end-to-end |
+| **1** | Foundation & Infra | Repo init, Docker Compose stack lengkap (mosquitto + clickhouse + redis + mlflow + prometheus + grafana), SKAB download script, RouteMQ scaffold, proposal v1 | `docker compose ps` semua services healthy |
+| **2** | Ingestion Pipeline | SKAB replayer publishing 8 channel sensor, sensor router/controller, ClickHouse telemetry schema, Redis cache, middleware suite, Streamlit dashboard v0 (live charts) | Live sensor data flowing end-to-end |
 | **3** | ML Baseline | Window features, train PCA T²/Q, train LSTM-AE, evaluate vs labeled anomalies, MLflow tracking integrated, first model versions registered | MLflow UI menampilkan experiments + registered models |
 | **4** | MLOps Loop | AnomalyDetectionJob pakai registered model + hot-swap via Redis, Evidently drift report, RetrainingJob scheduled (APScheduler), champion-challenger evaluation, synthetic drift injector | Manual trigger retrain → model v2 promoted ke `@champion` |
 | **5** | Observability + Polish | Prometheus metrics dari RouteMQ hooks, Grafana dashboards (system + ML), demo script automation, slide deck, ADR docs, proposal final, README polish | Full dry-run presentation timed 13–14 menit |
@@ -502,7 +502,7 @@ pdam-pump-sentinel/
 |---|---|---|
 | **A** | DevOps + RouteMQ Backend | Docker Compose, RouteMQ scaffold, routes, controllers, middleware suite, CI pipeline, observability wiring, Grafana dashboard |
 | **B** | ML + MLOps Engineer | SKAB preprocessing, feature engineering, train PCA + LSTM-AE, MLflow integration + registry, Evidently drift, champion-challenger evaluation logic |
-| **C** | Backend Integrator | Queue jobs (anomaly, retraining, drift), MySQL schema, Redis cache + hot-swap, SKAB replayer, drift injector, scheduler |
+| **C** | Backend Integrator | Queue jobs (anomaly, retraining, drift), ClickHouse telemetry schema, Redis cache + hot-swap, SKAB replayer, drift injector, scheduler |
 | **D** | Frontend + Presenter | Streamlit dashboard 4 halaman, slide deck, demo script, dokumentasi proposal, presentasi utama |
 
 Untuk tim 3 orang: gabungkan **A + C** menjadi satu role "Backend Engineer", pertahankan B dan D.
@@ -542,7 +542,7 @@ T+8   : Worker hot-swap. Anomaly score recover, dashboard hijau lagi.
 | Aspek | Bobot | Dipenuhi Oleh |
 |---|---:|---|
 | Ide & inovasi | 20% | Framework custom + data-driven anomaly + full MLOps lifecycle |
-| Implementasi teknis | 30% | RouteMQ pipeline penuh + queue worker + Redis/MySQL + 2 ML model + MLflow + Evidently + Docker + CI |
+| Implementasi teknis | 30% | RouteMQ pipeline penuh + queue worker + Redis/ClickHouse + 2 ML model + MLflow + Evidently + Docker + CI |
 | Fungsi & demo sistem | 25% | Live SKAB replay → dashboard live → MLOps loop dramatis |
 | Presentasi | 15% | Dual-highlight 40/60 narrative, hook industri kuat, demo storyboard 8-step |
 | Dokumentasi & laporan | 10% | Proposal 8 bagian, ADR docs, GitBook docs RouteMQ, README polished |

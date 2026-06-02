@@ -12,7 +12,7 @@
 
 | Anggota | Peran utama | Tanggung jawab awal |
 |---|---|---|
-| Anggota 1 | RouteMQ, DevOps, dan Backend Integrator | Docker Compose, Mosquitto, scaffold RouteMQ, routing, middleware, queue job, Redis/MySQL, model hot-swap, SKAB replayer, scheduler, observability |
+| Anggota 1 | RouteMQ, DevOps, dan Backend Integrator | Docker Compose, Mosquitto, scaffold RouteMQ, routing, middleware, queue job, Redis/ClickHouse, model hot-swap, SKAB replayer, scheduler, observability |
 | Anggota 2 | ML, MLOps, Dashboard, dan Dokumentasi | SKAB preprocessing, PCA T²/SPE Q, LSTM Autoencoder, MLflow, Evidently, evaluasi model, Streamlit dashboard, skenario demo, slide, proposal, laporan akhir |
 
 Integrasi akhir, pengujian demo, dan presentasi dilakukan bersama agar kedua sisi proyek tetap tersambung.
@@ -21,7 +21,7 @@ Integrasi akhir, pengujian demo, dan presentasi dilakukan bersama agar kedua sis
 
 PDAM Pump Sentinel adalah rancangan sistem AIoT untuk mendeteksi anomali pada sistem pompa distribusi air. Proyek ini tidak memakai data operasional PDAM asli. Dataset publik SKAB atau Skoltech Anomaly Benchmark dipakai sebagai surrogate karena berasal dari water circulation testbed industri dengan sensor getaran, arus, tekanan, suhu, tegangan, dan flow.
 
-Bobot pekerjaan dibagi 40/60 antara RouteMQ/DevOps dan AI/ML/MLOps. Bagian 40 persen berfokus pada RouteMQ sebagai framework aplikasi MQTT di Python, bukan sekadar konfigurasi broker. RouteMQ dirancang memiliki router, middleware, controller, queue, worker, integrasi Redis/MySQL, dan observability hook. Bagian 60 persen berada pada anomaly detection dan MLOps, yaitu training model, registry MLflow, monitoring drift, retraining terjadwal, dan evaluasi champion-challenger.
+Bobot pekerjaan dibagi 40/60 antara RouteMQ/DevOps dan AI/ML/MLOps. Bagian 40 persen berfokus pada RouteMQ sebagai framework aplikasi MQTT di Python, bukan sekadar konfigurasi broker. RouteMQ dirancang memiliki router, middleware, controller, queue, worker, integrasi Redis/ClickHouse, dan observability hook. Bagian 60 persen berada pada anomaly detection dan MLOps, yaitu training model, registry MLflow, monitoring drift, retraining terjadwal, dan evaluasi champion-challenger.
 
 Model awal yang dipakai sebagai champion adalah PCA Hotelling T²/SPE Q karena inference cepat, dapat dijelaskan, dan sesuai untuk process monitoring multivariat. LSTM Autoencoder menjadi challenger untuk membaca pola temporal nonlinier. Isolation Forest hanya dipakai sebagai baseline lemah atau pembanding negatif jika waktu pengerjaan masih cukup.
 
@@ -41,7 +41,7 @@ Dari sisi AI, model yang dilatih satu kali dapat menurun kualitasnya ketika dist
 
 Pertanyaan kerja dalam proyek ini adalah:
 
-1. Bagaimana membangun framework aplikasi MQTT, yaitu RouteMQ, yang mendukung routing topic, middleware, controller, queue worker, Redis/MySQL, dan observability untuk use case sensor industri?
+1. Bagaimana membangun framework aplikasi MQTT, yaitu RouteMQ, yang mendukung routing topic, middleware, controller, queue worker, Redis/ClickHouse, dan observability untuk use case sensor industri?
 2. Bagaimana memetakan dataset publik SKAB sebagai surrogate yang masuk akal untuk telemetry pompa distribusi air PDAM tanpa mengklaim adanya data PDAM asli?
 3. Bagaimana menerapkan PCA Hotelling T²/SPE Q sebagai champion model untuk mendeteksi anomali multivariat pada sensor pompa?
 4. Bagaimana membandingkan champion PCA dengan LSTM Autoencoder sebagai challenger dalam skema evaluasi yang adil?
@@ -102,7 +102,7 @@ MQTT adalah protokol publish-subscribe yang sering dipakai dalam IoT. Namun, pro
 
 Solusi proyek dibagi menjadi dua bagian besar.
 
-Pertama, RouteMQ dibuat sebagai framework aplikasi MQTT. RouteMQ memberi cara deklaratif untuk mendaftarkan handler topic, misalnya `factory/skab/{station}/telemetry`. Payload telemetry divalidasi, diberi correlation ID, disimpan ke Redis sebagai latest reading, disimpan ke MySQL sebagai data historis, lalu diteruskan ke queue job untuk inference. Dengan pola ini, bagian DevOps/RouteMQ menjadi kontribusi framework, bukan hanya konfigurasi broker Mosquitto.
+Pertama, RouteMQ dibuat sebagai framework aplikasi MQTT. RouteMQ memberi cara deklaratif untuk mendaftarkan handler topic, misalnya `factory/skab/{station}/telemetry`. Payload telemetry divalidasi, diberi correlation ID, disimpan ke Redis sebagai latest reading, disimpan ke ClickHouse sebagai data historis pada tabel `telemetry_observations`, lalu diteruskan ke queue job untuk inference. ClickHouse dipakai sebagai columnar store untuk multivariate sensor time-series dan sudah menjadi jalur TSDB first-class di RouteMQ 0.24. Dengan pola ini, bagian DevOps/RouteMQ menjadi kontribusi framework, bukan hanya konfigurasi broker Mosquitto.
 
 Kedua, sistem anomaly detection dan MLOps dibangun di atas SKAB. Replayer membaca CSV SKAB, mengirim data sensor ke MQTT, lalu RouteMQ menjalankan job anomaly detection. PCA Hotelling T²/SPE Q menjadi champion model awal. LSTM Autoencoder menjadi challenger yang dibandingkan melalui metrik precision, recall, F1, event-level F1, false alarm rate, dan detection delay. Model didaftarkan ke MLflow dengan nama `PumpAD`.
 
@@ -130,7 +130,7 @@ RouteMQ Application
     |-- Queue
     |-- Worker
     |-- Redis cache
-    |-- MySQL historical storage
+    |-- ClickHouse telemetry storage
     |
     | anomaly inference job
     v
@@ -154,7 +154,7 @@ Streamlit Dashboard
 1. `scripts/replay_skab.py` membaca file SKAB dan mengirim row sensor ke MQTT.
 2. Mosquitto menerima telemetry pada `factory/skab/{station}/telemetry`.
 3. RouteMQ router mencocokkan topic dan memanggil middleware validasi payload.
-4. Controller menyimpan latest reading ke Redis dan data historis ke MySQL.
+4. Controller menyimpan latest reading ke Redis dan data historis ke ClickHouse.
 5. Queue mengirim `AnomalyDetectionJob` ke worker.
 6. Worker mengambil rolling buffer 60 sample per station.
 7. Model champion dari MLflow `models:/PumpAD@champion` menghitung skor T² dan Q.
@@ -167,7 +167,7 @@ Streamlit Dashboard
 |---|---|
 | MQTT broker | Eclipse Mosquitto |
 | Framework aplikasi | RouteMQ, Python 3.12+ |
-| Storage | MySQL 8 untuk historis sensor, Redis 7 untuk cache, queue, dan active model pointer |
+| Storage | ClickHouse 24 untuk telemetry historis sensor, Redis 7 untuk cache, queue, dan active model pointer |
 | ML | scikit-learn, numpy, TensorFlow/Keras bila challenger dikerjakan |
 | MLOps | MLflow, Evidently, APScheduler |
 | Dashboard | Streamlit |
@@ -181,7 +181,7 @@ Konfigurasi mengikuti pola `.env.example` agar demo dapat dijalankan ulang.
 | Variabel | Peran |
 |---|---|
 | `MQTT_BROKER`, `MQTT_PORT`, `MQTT_QOS` | Koneksi ke Mosquitto |
-| `ENABLE_MYSQL`, `DB_HOST`, `DB_NAME` | Penyimpanan historis sensor dan queue database bila diperlukan |
+| `ENABLE_TELEMETRY`, `TELEMETRY_CONNECTION=clickhouse`, `TELEMETRY_URL` | Penyimpanan telemetry historis sensor ke ClickHouse melalui RouteMQ 0.24 |
 | `ENABLE_REDIS`, `REDIS_HOST`, `REDIS_DB` | Cache latest reading, queue, dan pointer model aktif |
 | `MLFLOW_TRACKING_URI` | Lokasi MLflow tracking server |
 | `MLFLOW_REGISTERED_MODEL=PumpAD` | Nama model anomaly detection di registry |
@@ -287,13 +287,13 @@ Pengujian dibagi menjadi empat kelompok.
 | Kelompok uji | Target | Bukti yang dikumpulkan |
 |---|---|---|
 | Unit test RouteMQ | Router topic matching, middleware, controller, queue dispatch | Test result dan coverage sederhana |
-| Integration test ingestion | SKAB replayer ke Mosquitto, RouteMQ ingest, Redis/MySQL write | Log pipeline dan isi storage |
+| Integration test ingestion | SKAB replayer ke Mosquitto, RouteMQ ingest, Redis/ClickHouse write | Log pipeline dan isi storage |
 | ML evaluation | PCA, LSTM-AE, threshold, metric evaluation | MLflow run, confusion matrix, metric table |
 | MLOps flow test | Retraining, compare, promotion, model hot-swap | MLflow registry version, Redis active URI, dashboard status |
 
 Skenario demo pengujian akhir:
 
-1. Jalankan Docker Compose untuk Mosquitto, Redis, MySQL, MLflow, Prometheus, dan Grafana.
+1. Jalankan Docker Compose untuk Mosquitto, Redis, ClickHouse, MLflow, Prometheus, dan Grafana.
 2. Jalankan RouteMQ application dan worker.
 3. Replay segment normal SKAB dan pastikan dashboard menunjukkan skor rendah.
 4. Replay segment anomali, misalnya valve closing, lalu pastikan alert muncul pada `factory/skab/{station}/anomaly`.
@@ -308,8 +308,8 @@ Rencana waktu mengikuti skala lima minggu pengerjaan dan satu minggu buffer.
 
 | Minggu | Fokus | Luaran mingguan |
 |---|---|---|
-| 1 | Foundation dan infra | Docker Compose awal, Mosquitto, Redis, MySQL, MLflow, struktur RouteMQ, proposal v1 |
-| 2 | Ingestion pipeline | SKAB replayer, route `factory/skab/{station}/telemetry`, validasi payload, storage Redis/MySQL, dashboard sensor v0 |
+| 1 | Foundation dan infra | Docker Compose awal, Mosquitto, Redis, ClickHouse, MLflow, struktur RouteMQ, proposal v1 |
+| 2 | Ingestion pipeline | SKAB replayer, route `factory/skab/{station}/telemetry`, validasi payload, storage Redis/ClickHouse, dashboard sensor v0 |
 | 3 | Model anomaly detection | Loader SKAB, windowing, PCA T²/SPE Q, LSTM-AE awal, evaluasi metric, MLflow tracking |
 | 4 | MLOps loop | Model registry `PumpAD`, inference job, Evidently drift report, retraining job, champion-challenger evaluation |
 | 5 | Observability dan demo | Prometheus/Grafana metric, dashboard final, demo script, slide, laporan akhir |
@@ -321,7 +321,7 @@ Pembagian tugas awal mengikuti dua anggota tim berikut.
 
 | Anggota | Tugas teknis | Output |
 |---|---|---|
-| Anggota 1 | Docker Compose, Mosquitto, RouteMQ scaffold, routing DSL, middleware, queue job, Redis active model URI, MySQL schema, SKAB replayer, drift injector, scheduler, CI, Prometheus hook | RouteMQ application dapat menerima telemetry, menyimpan data, menjalankan job inference, dan dieksekusi dalam stack lokal |
+| Anggota 1 | Docker Compose, Mosquitto, RouteMQ scaffold, routing DSL, middleware, queue job, Redis active model URI, ClickHouse telemetry schema, SKAB replayer, drift injector, scheduler, CI, Prometheus hook | RouteMQ application dapat menerima telemetry, menyimpan data, menjalankan job inference, dan dieksekusi dalam stack lokal |
 | Anggota 2 | SKAB preprocessing, windowing, PCA T²/SPE Q, LSTM-AE, MLflow logging, metric evaluation, Evidently drift report, Streamlit dashboard, proposal, slide, laporan | Model `PumpAD`, metric evaluasi, artifact MLflow, dashboard operator, dan bahan presentasi |
 
 Koordinasi dilakukan melalui issue atau task board sederhana. Setiap akhir minggu perlu ada demo kecil agar risiko integrasi tidak menumpuk di akhir.
@@ -331,7 +331,7 @@ Koordinasi dilakukan melalui issue atau task board sederhana. Setiap akhir mingg
 Luaran yang ditargetkan pada v0:
 
 1. Source code RouteMQ application untuk ingestion dan processing telemetry.
-2. Docker Compose stack untuk Mosquitto, Redis, MySQL, MLflow, Prometheus, Grafana, dan aplikasi.
+2. Docker Compose stack untuk Mosquitto, Redis, ClickHouse, MLflow, Prometheus, Grafana, dan aplikasi.
 3. Script replay SKAB ke MQTT.
 4. Pipeline training PCA Hotelling T²/SPE Q dan LSTM Autoencoder.
 5. MLflow experiment dan registered model `PumpAD`.

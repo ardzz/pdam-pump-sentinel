@@ -33,7 +33,8 @@ Detail lengkap: lihat [`docs/plans/design.md`](docs/plans/design.md).
 |---|---|
 | MQTT broker | Eclipse Mosquitto |
 | App framework | RouteMQ (Python 3.12+) |
-| Database | MySQL 8 + Redis 7 |
+| Telemetry store | ClickHouse 24 |
+| Cache + queue | Redis 7 |
 | ML | scikit-learn (PCA) + TensorFlow/Keras (LSTM-AE) |
 | MLOps | MLflow + Evidently AI |
 | Dashboard | Streamlit |
@@ -46,7 +47,7 @@ Detail lengkap: lihat [`docs/plans/design.md`](docs/plans/design.md).
 # Install dependencies
 uv sync
 
-# Bring up infra (Redis + MySQL + MQTT + MLflow)
+# Bring up infra (Redis + ClickHouse + MQTT + MLflow)
 make dev
 
 # Run RouteMQ app
