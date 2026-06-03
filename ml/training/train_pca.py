@@ -13,9 +13,13 @@ import numpy as np
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.datasets.skab_manifest import SkabSplitManifest, load_skab_split_manifest
 from ml.evaluation.metrics import evaluate_split
+from ml.features.spectral import build_spectral_window_features
 from ml.features.windowing import WindowedSensorDataset, build_sensor_windows
 from ml.training.pca_detector import PcaT2QDetector
 from ml.utils.provenance import collect_provenance
+
+_FEATURE_MODES = {'raw', 'spectral'}
+_SPECTRAL_N_BANDS = 4
 
 _METRIC_PROTOCOL = {
     'schema_version': 1,
@@ -51,6 +55,7 @@ class PcaTrainingConfig:
     register_model: bool = False
     registered_model_name: str = 'PumpAD'
     alias: str | None = None
+    feature_mode: str = 'raw'
 
 
 @dataclass(frozen=True)
@@ -255,6 +260,7 @@ def _parse_args(argv: Sequence[str] | None) -> PcaTrainingConfig:
     parser.add_argument('--register-model', action='store_true')
     parser.add_argument('--registered-model-name', default='PumpAD')
     parser.add_argument('--alias', default=None)
+    parser.add_argument('--feature-mode', choices=sorted(_FEATURE_MODES), default='raw')
     args = parser.parse_args(argv)
     args_dict = vars(args)
     paths = args_dict.pop('paths')
@@ -283,21 +289,44 @@ def _parse_n_components(value: str) -> int | float | None:
 def _normalize_config(config: PcaTrainingConfig) -> PcaTrainingConfig:
     validation_input_path = Path(config.validation_input_path) if config.validation_input_path is not None else None
     split_manifest_path = Path(config.split_manifest_path) if config.split_manifest_path is not None else None
+    feature_mode = config.feature_mode.lower()
+    if feature_mode not in _FEATURE_MODES:
+        raise ValueError(f'feature_mode must be one of: {", ".join(sorted(_FEATURE_MODES))}')
     return replace(
         config,
         input_path=Path(config.input_path),
         output_dir=Path(config.output_dir),
         validation_input_path=validation_input_path,
         split_manifest_path=split_manifest_path,
+        feature_mode=feature_mode,
     )
 
 
 def _load_windows(path: Path, config: PcaTrainingConfig) -> WindowedSensorDataset:
-    return build_sensor_windows(
-        load_skab_csv(path),
+    frame = load_skab_csv(path)
+    if config.feature_mode == 'raw':
+        return build_sensor_windows(
+            frame,
+            window_size=config.window_size,
+            stride=config.stride,
+            sensor_columns=SENSOR_COLUMNS,
+        )
+
+    features, labels, changepoints, timestamps = build_spectral_window_features(
+        frame,
         window_size=config.window_size,
         stride=config.stride,
         sensor_columns=SENSOR_COLUMNS,
+        n_bands=_SPECTRAL_N_BANDS,
+    )
+    return WindowedSensorDataset(
+        features=features,
+        labels=labels,
+        changepoints=changepoints,
+        timestamps=timestamps,
+        sensor_columns=tuple(SENSOR_COLUMNS),
+        window_size=config.window_size,
+        stride=config.stride,
     )
 
 
@@ -305,7 +334,7 @@ def _load_windows_multi(paths: list[Path], config: PcaTrainingConfig) -> Windowe
     datasets = [_load_windows(p, config) for p in paths]
     if not datasets:
         return WindowedSensorDataset(
-            features=np.empty((0, config.window_size * len(SENSOR_COLUMNS)), dtype=float),
+            features=np.empty((0, _feature_count(config)), dtype=float),
             labels=np.empty((0,), dtype=int),
             changepoints=np.empty((0,), dtype=int),
             timestamps=np.empty((0,), dtype=object),
@@ -314,6 +343,12 @@ def _load_windows_multi(paths: list[Path], config: PcaTrainingConfig) -> Windowe
             stride=config.stride,
         )
     return _concat_datasets(datasets)
+
+
+def _feature_count(config: PcaTrainingConfig) -> int:
+    if config.feature_mode == 'spectral':
+        return len(SENSOR_COLUMNS) * (_SPECTRAL_N_BANDS + 4)
+    return config.window_size * len(SENSOR_COLUMNS)
 
 
 def _concat_datasets(datasets: list[WindowedSensorDataset]) -> WindowedSensorDataset:
@@ -387,7 +422,7 @@ def _dump_detector(detector: PcaT2QDetector, path: Path) -> None:
 
 
 def _params(config: PcaTrainingConfig, training_windows: WindowedSensorDataset) -> dict[str, Any]:
-    return {
+    params = {
         'input_path': str(config.input_path),
         'output_dir': str(config.output_dir),
         'validation_input_path': str(config.validation_input_path) if config.validation_input_path is not None else None,
@@ -403,6 +438,10 @@ def _params(config: PcaTrainingConfig, training_windows: WindowedSensorDataset) 
         'alias': config.alias,
         'feature_count': int(training_windows.features.shape[1]),
     }
+    if config.feature_mode != 'raw':
+        params['feature_mode'] = config.feature_mode
+        params['spectral_n_bands'] = _SPECTRAL_N_BANDS
+    return params
 
 
 def _metadata_payload(
@@ -419,7 +458,7 @@ def _metadata_payload(
         'artifact_paths': {name: str(path) for name, path in result.artifact_paths.items()},
         'config': _jsonable_config(config),
         'metric_protocol': _METRIC_PROTOCOL,
-        'provenance': collect_provenance(config=config, input_files=provenance_input_files),
+        'provenance': collect_provenance(config=_jsonable_config(config), input_files=provenance_input_files),
     }
 
 
@@ -479,6 +518,8 @@ def _jsonable_config(config: PcaTrainingConfig) -> dict[str, Any]:
     for key in ('input_path', 'output_dir', 'validation_input_path', 'split_manifest_path'):
         value = payload[key]
         payload[key] = str(value) if value is not None else None
+    if payload['feature_mode'] == 'raw':
+        payload.pop('feature_mode')
     return payload
 
 
