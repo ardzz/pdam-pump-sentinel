@@ -14,7 +14,8 @@ from routemq.job import Job  # type: ignore[reportMissingImports]
 from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImports]
 
 from app.services.inference import MODEL_DIR_ENV, set_inference_service
-from ml.inference.pca_inference import PcaAnomalyInferenceService
+from ml.inference.loader import load_inference_service_from_artifacts
+from ml.inference.pca_inference import PcaAnomalyInferenceService as PcaAnomalyInferenceService
 from ml.monitoring.champion_challenger import should_promote
 from ml.training.train_pca import PcaTrainingConfig, train_pca_from_skab
 
@@ -112,10 +113,10 @@ def _read_champion_metrics() -> dict[str, float | None] | None:
 
 def _hot_swap(output_dir: Path) -> bool:
     try:
-        service = PcaAnomalyInferenceService.from_artifacts(output_dir)
+        service = load_inference_service_from_artifacts(output_dir)
         set_inference_service(service)
     except Exception:
-        logger.warning('could not hot-swap PCA inference service from %s', output_dir, exc_info=True)
+        logger.warning('could not hot-swap inference service from %s', output_dir, exc_info=True)
         return False
     return True
 

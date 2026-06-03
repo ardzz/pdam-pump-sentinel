@@ -7,13 +7,20 @@ from dataclasses import fields, is_dataclass
 from importlib import import_module
 from numbers import Real
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from ml.inference.pca_inference import PcaAnomalyInferenceService
+from ml.inference.loader import load_inference_service_from_artifacts
+from ml.inference.pca_inference import PcaAnomalyInferenceService as PcaAnomalyInferenceService
 
 MODEL_ARTIFACT_NAME = 'pca_anomaly_model'
+LSTM_AE_MODEL_ARTIFACT_NAME = 'lstm_ae_model'
 DEFAULT_REGISTERED_MODEL_NAME = 'PumpAD'
 MODEL_DIR_ENV = 'PUMPAD_MODEL_DIR'
+
+
+class InferenceService(Protocol):
+    def observe(self, station: str, timestamp: str | None, sensors: Mapping[str, Any]) -> Any:
+        ...
 
 
 def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
@@ -68,14 +75,14 @@ def load_champion_service(
     model_name: str = DEFAULT_REGISTERED_MODEL_NAME,
     alias: str = 'champion',
     local_model_dir: str | None = None,
-) -> PcaAnomalyInferenceService | None:
+) -> InferenceService | None:
     service = _load_service_from_mlflow_alias(model_name, alias)
     if service is not None:
         return service
     return _load_service_from_local_dir(local_model_dir or os.getenv(MODEL_DIR_ENV))
 
 
-def _load_service_from_mlflow_alias(model_name: str, alias: str) -> PcaAnomalyInferenceService | None:
+def _load_service_from_mlflow_alias(model_name: str, alias: str) -> InferenceService | None:
     try:
         mlflow = import_module('mlflow')
         mlflow_artifacts = import_module('mlflow.artifacts')
@@ -95,21 +102,67 @@ def _load_service_from_mlflow_alias(model_name: str, alias: str) -> PcaAnomalyIn
             return None
 
         downloaded_dir = mlflow_artifacts.download_artifacts(artifact_uri=str(source))
-        return PcaAnomalyInferenceService.from_artifacts(downloaded_dir, _model_version(version))
+        return load_inference_service_from_artifacts(downloaded_dir, _model_version(version))
     except Exception:
         return None
 
 
-def _load_service_from_local_dir(model_dir: str | None) -> PcaAnomalyInferenceService | None:
+def _load_service_from_local_dir(model_dir: str | None) -> InferenceService | None:
     if not model_dir:
         return None
     directory = Path(model_dir)
-    if not (directory / 'pca_detector.joblib').exists():
+    if not _looks_like_model_dir(directory):
         return None
     try:
-        return PcaAnomalyInferenceService.from_artifacts(directory)
+        return load_inference_service_from_artifacts(directory)
     except Exception:
         return None
+
+
+def log_lstm_ae_training_run(result: Any, model: Any, config: Any) -> str | None:
+    try:
+        mlflow = import_module('mlflow')
+        mlflow_tensorflow = import_module('mlflow.tensorflow')
+    except ImportError:
+        return None
+
+    try:
+        tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+
+        run_id: str | None = None
+        registered_model_name = _registered_model_name(config)
+
+        with mlflow.start_run() as run:
+            run_id = _run_id(run)
+
+            params = _collect_params(config, result)
+            if params:
+                mlflow.log_params(params)
+
+            metrics = _collect_metrics(result)
+            if metrics:
+                mlflow.log_metrics(metrics)
+
+            output_dir = _result_output_dir(result)
+            if output_dir is not None and output_dir.exists():
+                mlflow.log_artifacts(str(output_dir))
+
+            model_info = mlflow_tensorflow.log_model(
+                model,
+                name=LSTM_AE_MODEL_ARTIFACT_NAME,
+                registered_model_name=registered_model_name,
+            )
+            _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info)
+
+        return run_id
+    except Exception:
+        return None
+
+
+def _looks_like_model_dir(model_dir: Path) -> bool:
+    return any((model_dir / name).exists() for name in ('metadata.json', 'pca_detector.joblib', 'lstm_ae.keras'))
 
 
 def _model_version(version: Any) -> str | None:
@@ -218,4 +271,4 @@ def _numeric_metrics(values: Any) -> dict[str, float]:
     return metrics
 
 
-__all__ = ['load_champion_service', 'log_pca_training_run']
+__all__ = ['PcaAnomalyInferenceService', 'load_champion_service', 'log_lstm_ae_training_run', 'log_pca_training_run']

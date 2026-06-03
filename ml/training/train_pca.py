@@ -411,6 +411,7 @@ def _metadata_payload(
     provenance_input_files: Sequence[Path],
 ) -> dict[str, Any]:
     return {
+        'model_family': 'pca',
         'params': result.params,
         'metrics': result.metrics,
         'thresholds': result.thresholds,
