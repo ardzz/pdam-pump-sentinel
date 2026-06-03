@@ -109,6 +109,47 @@ def event_metrics(labels: Any, predictions: Any) -> dict[str, MetricValue]:
     }
 
 
+def composite_f_score(labels: Any, predictions: Any) -> dict[str, MetricValue]:
+    labels_array, predictions_array = _binary_pair(labels, predictions)
+    positive = labels_array == 1
+    negative = labels_array == 0
+    predicted_positive = predictions_array == 1
+    true_positive = int(np.count_nonzero(predicted_positive & positive))
+    false_positive = int(np.count_nonzero(predicted_positive & negative))
+    point_precision = _safe_divide(true_positive, true_positive + false_positive)
+
+    label_ranges = contiguous_ranges(labels_array)
+    prediction_ranges = contiguous_ranges(predictions_array)
+    event_recall = _event_recall(label_ranges, prediction_ranges)
+    composite_f1 = None if event_recall is None else _safe_divide(2.0 * point_precision * event_recall, point_precision + event_recall)
+    return {
+        'point_precision': point_precision,
+        'event_recall': event_recall,
+        'composite_f1': composite_f1,
+    }
+
+
+def event_precision_recall(labels: Any, predictions: Any) -> dict[str, MetricValue]:
+    labels_array, predictions_array = _binary_pair(labels, predictions)
+    label_ranges = contiguous_ranges(labels_array)
+    prediction_ranges = contiguous_ranges(predictions_array)
+
+    event_precision = None
+    if prediction_ranges:
+        event_precision = float(_matched_range_count(prediction_ranges, label_ranges) / len(prediction_ranges))
+    event_recall = _event_recall(label_ranges, prediction_ranges)
+    event_f1 = _harmonic_mean_or_none(event_precision, event_recall)
+    return {
+        'event_precision': event_precision,
+        'event_recall': event_recall,
+        'event_f1': event_f1,
+    }
+
+
+def evaluate_events(labels: Any, predictions: Any) -> dict[str, MetricValue]:
+    return composite_f_score(labels, predictions) | event_precision_recall(labels, predictions)
+
+
 def evaluate_split(labels: Any, predictions: Any, scores: Any, transient_mask: Any | None = None) -> dict[str, MetricValue]:
     """Return point, threshold-free, and event metrics for one evaluation split.
 
@@ -192,6 +233,20 @@ def _safe_metric_call(metric_func: Any, labels: np.ndarray, scores: np.ndarray) 
     except Exception:
         return None
     return value if math.isfinite(value) else None
+
+
+def _event_recall(label_ranges: list[tuple[int, int]], prediction_ranges: list[tuple[int, int]]) -> float | None:
+    return None if not label_ranges else float(_matched_range_count(label_ranges, prediction_ranges) / len(label_ranges))
+
+
+def _matched_range_count(left_ranges: list[tuple[int, int]], right_ranges: list[tuple[int, int]]) -> int:
+    return sum(1 for left_range in left_ranges if any(_ranges_overlap(left_range, right_range) for right_range in right_ranges))
+
+
+def _harmonic_mean_or_none(left: float | None, right: float | None) -> float | None:
+    if left is None or right is None:
+        return None
+    return _safe_divide(2.0 * left * right, left + right)
 
 
 def _ranges_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
