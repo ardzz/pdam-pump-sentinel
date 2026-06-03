@@ -9,8 +9,11 @@ from numbers import Real
 from pathlib import Path
 from typing import Any
 
+from ml.inference.pca_inference import PcaAnomalyInferenceService
+
 MODEL_ARTIFACT_NAME = 'pca_anomaly_model'
 DEFAULT_REGISTERED_MODEL_NAME = 'PumpAD'
+MODEL_DIR_ENV = 'PUMPAD_MODEL_DIR'
 
 
 def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
@@ -59,6 +62,59 @@ def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
         _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info)
 
     return run_id
+
+
+def load_champion_service(
+    model_name: str = DEFAULT_REGISTERED_MODEL_NAME,
+    alias: str = 'champion',
+    local_model_dir: str | None = None,
+) -> PcaAnomalyInferenceService | None:
+    service = _load_service_from_mlflow_alias(model_name, alias)
+    if service is not None:
+        return service
+    return _load_service_from_local_dir(local_model_dir or os.getenv(MODEL_DIR_ENV))
+
+
+def _load_service_from_mlflow_alias(model_name: str, alias: str) -> PcaAnomalyInferenceService | None:
+    try:
+        mlflow = import_module('mlflow')
+        mlflow_artifacts = import_module('mlflow.artifacts')
+        mlflow_tracking = import_module('mlflow.tracking')
+    except ImportError:
+        return None
+
+    try:
+        tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+
+        client = mlflow_tracking.MlflowClient()
+        version = client.get_model_version_by_alias(model_name, alias)
+        source = getattr(version, 'source', None)
+        if not source:
+            return None
+
+        downloaded_dir = mlflow_artifacts.download_artifacts(artifact_uri=str(source))
+        return PcaAnomalyInferenceService.from_artifacts(downloaded_dir, _model_version(version))
+    except Exception:
+        return None
+
+
+def _load_service_from_local_dir(model_dir: str | None) -> PcaAnomalyInferenceService | None:
+    if not model_dir:
+        return None
+    directory = Path(model_dir)
+    if not (directory / 'pca_detector.joblib').exists():
+        return None
+    try:
+        return PcaAnomalyInferenceService.from_artifacts(directory)
+    except Exception:
+        return None
+
+
+def _model_version(version: Any) -> str | None:
+    value = getattr(version, 'version', None)
+    return None if value is None else str(value)
 
 
 def _registered_model_name(config: Any) -> str | None:
@@ -162,4 +218,4 @@ def _numeric_metrics(values: Any) -> dict[str, float]:
     return metrics
 
 
-__all__ = ['log_pca_training_run']
+__all__ = ['load_champion_service', 'log_pca_training_run']
