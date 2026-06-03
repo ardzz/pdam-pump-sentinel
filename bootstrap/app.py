@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from dotenv import load_dotenv
+from routemq.job_registry import discover_and_register_jobs  # type: ignore[reportMissingImports]
 from routemq.logging_config import configure_logging  # type: ignore[reportMissingImports]
 from routemq.mqtt_utils import (  # type: ignore[reportMissingImports]
     connect_mqtt_client_with_retries,
@@ -13,12 +15,15 @@ from routemq.mqtt_utils import (  # type: ignore[reportMissingImports]
     get_mqtt_connection_config,
     parse_mqtt_payload,
 )  # type: ignore[reportMissingImports]
+from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImports]
 from routemq.router import Router  # type: ignore[reportMissingImports]
 from routemq.router_registry import create_dynamic_router  # type: ignore[reportMissingImports]
 from routemq.settings import load_telemetry_settings  # type: ignore[reportMissingImports]
 from routemq.telemetry import telemetry  # type: ignore[reportMissingImports]
 from routemq.tsdb.telemetry_adapters import adapter_from_settings  # type: ignore[reportMissingImports]
 from routemq.worker_manager import WorkerManager  # type: ignore[reportMissingImports]
+
+from ml.monitoring.scheduler import RetrainScheduler
 
 
 class Application:
@@ -43,6 +48,9 @@ class Application:
         self._telemetry_started = False
 
     async def _initialize_connections(self) -> None:
+        if os.getenv('ENABLE_REDIS', 'false').lower() == 'true':
+            await redis_manager.initialize()
+        discover_and_register_jobs('app.jobs')
         settings = load_telemetry_settings()
         if not settings.enabled:
             return
@@ -55,7 +63,8 @@ class Application:
     async def _cleanup_connections(self) -> None:
         if self._telemetry_started:
             await telemetry.close()
-            self._telemetry_started = False
+        self._telemetry_started = False
+        self._retrain_scheduler = RetrainScheduler()
 
     def connect(self) -> None:
         config = get_mqtt_connection_config()
@@ -80,12 +89,15 @@ class Application:
         client.loop_start()
         try:
             self.loop.run_until_complete(self._initialize_connections())
+            if os.getenv('ENABLE_RETRAIN_SCHEDULER', 'false').lower() == 'true':
+                self._retrain_scheduler.start(self.loop)
             self.logger.info('Application started. Press Ctrl+C to exit.')
             self.loop.run_forever()
         except KeyboardInterrupt:
             self.logger.info('Stopping RouteMQ application')
         finally:
             self.worker_manager.stop_workers()
+            self._retrain_scheduler.shutdown()
             self.loop.run_until_complete(self._cleanup_connections())
             client.loop_stop()
             client.disconnect()
