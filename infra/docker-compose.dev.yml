@@ -94,6 +94,47 @@ services:
       retries: 5
       start_period: 10s
 
+  app:
+    image: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+    working_dir: /workspace
+    command: ["sh", "-c", "uv sync --frozen && uv run python -m bootstrap.app"]
+    environment:
+      UV_PROJECT_ENVIRONMENT: /opt/pdam-venv
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+      ENABLE_REDIS: ${ENABLE_REDIS:-true}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+      TELEMETRY_CONNECTION: ${TELEMETRY_CONNECTION:-clickhouse}
+      TELEMETRY_URL: ${TELEMETRY_URL:-http://default:@clickhouse:8123/default}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      HEALTH_HTTP_ENABLED: ${HEALTH_HTTP_ENABLED:-true}
+      HEALTH_HTTP_HOST: 0.0.0.0
+      HEALTH_HTTP_PORT: "8080"
+      METRICS_HTTP_ENABLED: ${METRICS_HTTP_ENABLED:-true}
+      METRICS_HTTP_PATH: ${METRICS_HTTP_PATH:-/metrics}
+      METRICS_HTTP_SEPARATE: ${METRICS_HTTP_SEPARATE:-false}
+      METRICS_HTTP_HOST: 0.0.0.0
+      METRICS_HTTP_PORT: "8080"
+      METRICS_NAMESPACE: ${METRICS_NAMESPACE:-routemq}
+      METRICS_DEFAULT_LABELS: ${METRICS_DEFAULT_LABELS:-service=pdam-pump-sentinel,env=dev}
+    ports:
+      - "${APP_METRICS_PORT:-8080}:8080"
+    volumes:
+      - ..:/workspace
+      - app-venv:/opt/pdam-venv
+      - uv-cache:/root/.cache/uv
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+
   prometheus:
     image: prom/prometheus:v2.55.1
     command:
@@ -123,6 +164,8 @@ volumes:
   mysql-data:
   clickhouse-data:
   mlflow-data:
+  app-venv:
+  uv-cache:
   grafana-data:
 
 networks:
