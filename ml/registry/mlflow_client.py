@@ -66,7 +66,7 @@ def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
             name=MODEL_ARTIFACT_NAME,
             registered_model_name=registered_model_name,
         )
-        _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info)
+        _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
 
     return run_id
 
@@ -97,12 +97,15 @@ def _load_service_from_mlflow_alias(model_name: str, alias: str) -> InferenceSer
 
         client = mlflow_tracking.MlflowClient()
         version = client.get_model_version_by_alias(model_name, alias)
-        source = getattr(version, 'source', None)
-        if not source:
+        run_id = getattr(version, 'run_id', None)
+        if not run_id:
             return None
 
-        downloaded_dir = mlflow_artifacts.download_artifacts(artifact_uri=str(source))
-        return load_inference_service_from_artifacts(downloaded_dir, _model_version(version))
+        downloaded_dir = mlflow_artifacts.download_artifacts(run_id=str(run_id), artifact_path='')
+        model_dir = _find_logged_artifact_dir(downloaded_dir)
+        if model_dir is None:
+            return None
+        return load_inference_service_from_artifacts(model_dir, _model_version(version))
     except Exception:
         return None
 
@@ -154,7 +157,7 @@ def log_lstm_ae_training_run(result: Any, model: Any, config: Any) -> str | None
                 name=LSTM_AE_MODEL_ARTIFACT_NAME,
                 registered_model_name=registered_model_name,
             )
-            _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info)
+            _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
 
         return run_id
     except Exception:
@@ -176,16 +179,69 @@ def _registered_model_name(config: Any) -> str | None:
     return str(_lookup(config, 'registered_model_name', DEFAULT_REGISTERED_MODEL_NAME) or DEFAULT_REGISTERED_MODEL_NAME)
 
 
-def _set_model_alias_if_requested(mlflow: Any, config: Any, registered_model_name: str | None, model_info: Any) -> None:
+def _set_model_alias_if_requested(
+    mlflow: Any,
+    config: Any,
+    registered_model_name: str | None,
+    model_info: Any,
+    run_id: str | None,
+) -> None:
     alias = _lookup(config, 'alias', None)
-    if not registered_model_name or not alias or not hasattr(mlflow, 'set_registered_model_alias'):
+    if not registered_model_name or not alias:
         return
 
-    version = getattr(model_info, 'registered_model_version', None)
+    version = _resolve_registered_model_version(registered_model_name, run_id, model_info)
     if version is None:
         return
 
-    mlflow.set_registered_model_alias(registered_model_name, str(alias), str(version))
+    try:
+        mlflow_tracking = import_module('mlflow.tracking')
+        client = mlflow_tracking.MlflowClient()
+        client.set_registered_model_alias(registered_model_name, str(alias), str(version))
+    except Exception:
+        if hasattr(mlflow, 'set_registered_model_alias'):
+            mlflow.set_registered_model_alias(registered_model_name, str(alias), str(version))
+
+
+def _resolve_registered_model_version(registered_model_name: str, run_id: str | None, model_info: Any) -> str | None:
+    try:
+        mlflow_tracking = import_module('mlflow.tracking')
+        client = mlflow_tracking.MlflowClient()
+        if run_id:
+            versions = client.search_model_versions(filter_string=f"run_id='{run_id}'")
+            version = _select_model_version(versions, registered_model_name)
+            if version is not None:
+                return version
+        version = _select_model_version(client.get_latest_versions(registered_model_name), registered_model_name)
+        if version is not None:
+            return version
+    except Exception:
+        pass
+    return _model_version(model_info)
+
+
+def _select_model_version(versions: Any, registered_model_name: str) -> str | None:
+    candidates = list(versions or [])
+    matching = [version for version in candidates if getattr(version, 'name', registered_model_name) == registered_model_name]
+    selected = matching or candidates
+    if not selected:
+        return None
+    return max((_model_version(version) for version in selected), key=_version_sort_key, default=None)
+
+
+def _version_sort_key(version: str | None) -> tuple[int, str]:
+    if version is None:
+        return (-1, '')
+    return (int(version), version) if version.isdigit() else (0, version)
+
+
+def _find_logged_artifact_dir(artifact_dir: str | Path) -> Path | None:
+    directory = Path(artifact_dir)
+    if (directory / 'metadata.json').exists():
+        return directory
+    for metadata_path in sorted(directory.rglob('metadata.json')):
+        return metadata_path.parent
+    return None
 
 
 def _collect_params(config: Any, result: Any) -> dict[str, str | int | float | bool]:

@@ -30,6 +30,7 @@ def _install_fake_mlflow(monkeypatch, *, run_id: str | None = 'run-123', model_v
         'artifacts': [],
         'models': [],
         'aliases': [],
+        'searches': [],
         'start_runs': [],
     }
 
@@ -79,8 +80,31 @@ def _install_fake_mlflow(monkeypatch, *, run_id: str | None = 'run-123', model_v
     sklearn_any.log_model = log_model
     mlflow_any.sklearn = sklearn
 
+    tracking = types.ModuleType('mlflow.tracking')
+    tracking_any = cast(Any, tracking)
+
+    class FakeMlflowClient:
+        def search_model_versions(self, filter_string):
+            calls['searches'].append(filter_string)
+            if model_version is None or not calls['models']:
+                return []
+            name = calls['models'][-1]['registered_model_name']
+            return [SimpleNamespace(name=name, version=model_version)] if name else []
+
+        def get_latest_versions(self, name):
+            if model_version is None:
+                return []
+            return [SimpleNamespace(name=name, version=model_version)]
+
+        def set_registered_model_alias(self, name, alias, version):
+            calls['aliases'].append((name, alias, version))
+
+    tracking_any.MlflowClient = FakeMlflowClient
+    mlflow_any.tracking = tracking
+
     monkeypatch.setitem(sys.modules, 'mlflow', mlflow)
     monkeypatch.setitem(sys.modules, 'mlflow.sklearn', sklearn)
+    monkeypatch.setitem(sys.modules, 'mlflow.tracking', tracking)
     return calls
 
 
@@ -141,6 +165,7 @@ def test_log_pca_training_run_logs_payload_artifacts_model_registration_and_alia
         }
     ]
     assert calls['aliases'] == [('PumpADCandidate', 'champion', '7')]
+    assert calls['searches'] == ["run_id='run-123'"]
 
 
 def test_log_pca_training_run_skips_optional_registration_alias_and_missing_run_id(monkeypatch):

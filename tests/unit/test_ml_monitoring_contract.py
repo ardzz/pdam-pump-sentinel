@@ -65,6 +65,8 @@ def test_should_promote_contract(champion, challenger, expected, reason_fragment
 def test_load_champion_service_resolves_mlflow_alias_offline(monkeypatch, tmp_path):
     sentinel = object()
     downloaded_dir = tmp_path / 'downloaded'
+    downloaded_dir.mkdir()
+    (downloaded_dir / 'metadata.json').write_text('{"model_family": "pca"}\n', encoding='utf-8')
     calls = _install_fake_mlflow_for_loading(monkeypatch, downloaded_dir)
 
     def from_artifacts(model_dir, model_version=None):
@@ -79,15 +81,15 @@ def test_load_champion_service_resolves_mlflow_alias_offline(monkeypatch, tmp_pa
     assert service is sentinel
     assert calls['tracking_uris'] == ['file:///tmp/mlruns-contract']
     assert calls['aliases'] == [('PumpAD', 'champion')]
-    assert calls['downloads'] == ['runs:/run-123/pca_anomaly_model']
-    assert calls['artifacts'] == [(str(downloaded_dir), '12')]
+    assert calls['downloads'] == [('run-123', '')]
+    assert calls['artifacts'] == [(downloaded_dir, '12')]
 
 
 def test_load_champion_service_uses_local_fallback_when_mlflow_unavailable(monkeypatch, tmp_path):
     _force_mlflow_unavailable(monkeypatch)
     artifact_dir = _write_local_artifacts(tmp_path / 'model')
 
-    service = mlflow_client.load_champion_service(local_model_dir=str(artifact_dir))
+    service = cast(Any, mlflow_client.load_champion_service(local_model_dir=str(artifact_dir)))
 
     assert service is not None
     assert service.sensor_columns == ('a', 'b')
@@ -122,14 +124,14 @@ def _install_fake_mlflow_for_loading(monkeypatch, downloaded_dir):
     artifacts = types.ModuleType('mlflow.artifacts')
     artifacts_any = cast(Any, artifacts)
 
-    def download_artifacts(*, artifact_uri):
-        calls['downloads'].append(artifact_uri)
+    def download_artifacts(*, run_id, artifact_path):
+        calls['downloads'].append((run_id, artifact_path))
         return str(downloaded_dir)
 
     artifacts_any.download_artifacts = download_artifacts
     tracking = types.ModuleType('mlflow.tracking')
     tracking_any = cast(Any, tracking)
-    version = SimpleNamespace(source='runs:/run-123/pca_anomaly_model', version='12')
+    version = SimpleNamespace(source='runs:/run-123/pca_anomaly_model', version='12', run_id='run-123')
 
     class FakeMlflowClient:
         def get_model_version_by_alias(self, model_name, alias):
