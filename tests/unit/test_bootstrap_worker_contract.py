@@ -2,6 +2,7 @@ from routemq.job_registry import discover_and_register_jobs  # type: ignore[repo
 from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImports]
 from routemq.router import Router  # type: ignore[reportMissingImports]
 
+import bootstrap.app as bootstrap_app
 from bootstrap.app import Application
 
 
@@ -47,3 +48,79 @@ def test_discover_and_register_jobs_returns_list():
     result = discover_and_register_jobs('app.jobs')
 
     assert isinstance(result, list)
+
+
+def test_metrics_health_server_starts_when_enabled(monkeypatch):
+    instances = []
+
+    class FakeHealthServer:
+        def __init__(self, status, host='127.0.0.1', port=8080, metrics_renderer=None, metrics_path='/metrics'):
+            self.status = status
+            self.host = host
+            self.port = port
+            self.metrics_renderer = metrics_renderer
+            self.metrics_path = metrics_path
+            self.started = False
+            self.stopped = False
+            instances.append(self)
+
+        def start(self):
+            self.started = True
+
+        def stop(self):
+            self.stopped = True
+
+    monkeypatch.setattr(bootstrap_app, 'HealthServer', FakeHealthServer)
+    monkeypatch.setenv('HEALTH_HTTP_ENABLED', 'true')
+    monkeypatch.setenv('HEALTH_HTTP_HOST', '0.0.0.0')
+    monkeypatch.setenv('HEALTH_HTTP_PORT', '8080')
+    monkeypatch.setenv('METRICS_HTTP_ENABLED', 'true')
+    monkeypatch.setenv('METRICS_HTTP_PATH', '/metrics')
+    monkeypatch.setenv('METRICS_HTTP_SEPARATE', 'false')
+    monkeypatch.setenv('METRICS_NAMESPACE', 'routemq')
+    monkeypatch.setenv('METRICS_DEFAULT_LABELS', 'service=pdam-pump-sentinel,env=dev')
+
+    application = _application()
+    try:
+        application._start_health_servers()
+
+        assert len(instances) == 1
+        server = instances[0]
+        assert server.status is application.health_status
+        assert server.host == '0.0.0.0'
+        assert server.port == 8080
+        assert server.metrics_path == '/metrics'
+        assert callable(server.metrics_renderer)
+        assert server.started is True
+        assert application.metrics_registry is not None
+    finally:
+        application._stop_health_servers()
+        application.loop.close()
+
+
+def test_metrics_health_server_does_not_start_when_disabled(monkeypatch):
+    instances = []
+
+    class FakeHealthServer:
+        def __init__(self, *args, **kwargs):
+            instances.append((args, kwargs))
+
+        def start(self):
+            raise AssertionError('health server should not start')
+
+    monkeypatch.setattr(bootstrap_app, 'HealthServer', FakeHealthServer)
+    monkeypatch.setenv('HEALTH_HTTP_ENABLED', 'false')
+    monkeypatch.setenv('METRICS_HTTP_ENABLED', 'false')
+    monkeypatch.setenv('METRICS_HTTP_SEPARATE', 'false')
+
+    application = _application()
+    try:
+        application._start_health_servers()
+
+        assert instances == []
+        assert application.health_server is None
+        assert application.metrics_health_server is None
+        assert application.metrics_registry is None
+    finally:
+        application._stop_health_servers()
+        application.loop.close()
