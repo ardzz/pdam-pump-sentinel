@@ -228,6 +228,12 @@ def _configure_mlflow(tracking_uri: str, experiment_name: str) -> tuple[Any, Any
     mlflow.set_tracking_uri(tracking_uri)
     if mlflow.active_run() is not None:
         mlflow.end_run()
+    try:
+        from ml.registry.mlflow_client import _enable_system_metrics_logging_if_available
+
+        _enable_system_metrics_logging_if_available(mlflow)
+    except Exception:
+        pass
     mlflow.set_experiment(experiment_name)
     client = mlflow_tracking.MlflowClient()
     experiment = client.get_experiment_by_name(experiment_name)
