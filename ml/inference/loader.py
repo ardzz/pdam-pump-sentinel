@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import json
+from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from ml.inference.lstm_ae_inference import LstmAeAnomalyInferenceService
 from ml.inference.pca_inference import PcaAnomalyInferenceService
+from ml.inference.supervised_inference import SupervisedAnomalyInferenceService
+
+IsoForestAnomalyInferenceService: Any = import_module(
+    'ml.inference.isoforest_inference'
+).IsoForestAnomalyInferenceService
 
 
 def load_inference_service_from_artifacts(model_dir: str | Path, model_version: str | None = None):
@@ -12,8 +19,12 @@ def load_inference_service_from_artifacts(model_dir: str | Path, model_version: 
     model_family = _read_model_family(directory / 'metadata.json')
     if model_family in ('', 'pca'):
         return PcaAnomalyInferenceService.from_artifacts(model_dir, model_version)
+    if model_family == 'isolation_forest':
+        return IsoForestAnomalyInferenceService.from_artifacts(model_dir, model_version)
     if model_family == 'lstm_ae':
         return LstmAeAnomalyInferenceService.from_artifacts(model_dir, model_version)
+    if model_family in ('xgboost', 'lightgbm'):
+        return SupervisedAnomalyInferenceService.from_artifacts(model_dir, model_version)
     raise ValueError(f'unsupported model_family: {model_family}')
 
 
