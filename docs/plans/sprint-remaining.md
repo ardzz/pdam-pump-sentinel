@@ -1,29 +1,35 @@
 # Sprint — Remaining Tasks
 
-Status snapshot grounded in `git log` (HEAD `2ac6f9a`, ahead of `origin/main`) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
+Status snapshot grounded in `git log` (HEAD `9e52b78`, in sync with `origin/main`) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
 
 ## Done (verified)
 
 - **Week 1–2** — Foundation, infra stack, SKAB ingestion pipeline, dashboard v0.
 - **Week 3 (ML baseline, core)** — Window features (raw/spectral/enriched), PCA T²/Q champion, LSTM-AE challenger, event-based eval metrics, MLflow tracking integrated.
 - **Week 3 tail — live MLflow seeded** — `scripts/seed_initial_models.py` ran against the server at `:5000`; registered model `PumpAD` with `@champion → v1`; `load_champion_service` round-trip confirmed against the server (`7ced737` for the underlying alias-resolution fix; verified live this sprint).
-- **Week 4 (MLOps loop)** — Registered-model loader + hot-swap, Evidently drift, scheduled retraining, champion-challenger promotion gate (`should_promote`, `f1_margin=0.02`, `far_guard=1.05`), drift injector.
+- **Week 4 (MLOps loop)** — Registered-model loader + hot-swap, Evidently drift, scheduled retraining (APScheduler), champion-challenger promotion gate (`should_promote`, `f1_margin=0.02`, `far_guard=1.05`), drift injector.
 - **Week 5 (partial)** — Prometheus metrics from RouteMQ hooks + Grafana dashboards (system + ML). Commits `f4981fd`, `832303e`, `03a7156`.
 - **Extra model families** — Isolation Forest (unsupervised) + supervised XGBoost/LightGBM, family-aware loader dispatch.
 - **MLflow tracking maximized for the report** — Cross-family comparison experiment `pump_sentinel_model_comparison` with consistent tags (`model_family`, `feature_mode`, `split_strategy`, `dataset`, `report_run`); per-iteration live curves (LSTM-AE per-epoch `loss`/`val_loss`; XGB `val_xgb_logloss_round`; LGBM `val_lgbm_binary_logloss_round`); SKAB dataset cards via `mlflow.data` with stable digest per manifest; system metrics autolog (CPU/memory/disk); run-traceability tags (`git.commit.sha`, `git.branch`, `git.is_dirty`, `python.version`, `host.name`, `package.{mlflow,scikit-learn,tensorflow,xgboost,lightgbm}`); model signatures + input examples on each `*_model/` artifact. Commits `e9fd362`, `f9ade52`, `16a1ba8`, `47126ba`, `894e7db`, `2ac6f9a`.
 - **MLflow bugfixes** — Champion alias resolution under MLflow 3.12 (`registered_model_version` is `None`); reload from run artifacts not sklearn-flavor dir (`7ced737`). XGB `MlflowXGBCallback` lifted to module-level and made picklable (`894e7db`). System metrics enabled before the comparison script opens its first run (`2ac6f9a`).
 - **Permanent port remap** — `infra/.env` (gitignored) with remapped host ports; Makefile `dev`/`dev-down`/`ps`/`logs` use `--env-file infra/.env`; unused `mysql` service dropped from dev compose (`427989f`, `95664c6`).
-- **`.playwright-mcp/` gitignored** (`6a661e2`).
+- **`.playwright-mcp/` gitignored** (`6a661e2`); **stray `mlflow.db` gitignored** (`9e52b78`).
+- **Cross-family comparison report serving** — `make mlflow-report` target serves comparison runs from `data/mlflow_live.db` on port 5050 in parallel with docker MLflow on `:5000` (`d514ad8`).
+- **Presentation supporting material** — `docs/presentation/labeling-strategy-notes.md` 121-line speaker notes with industry citations (6 vendors), peer-reviewed academic citations (4 papers), 13 repo proof-points, 5 honest gaps, and Indonesian speaker script (`e714009`).
+- **Demo-blocker P0 fixes** (surfaced from this sprint's RouteMQ ↔ ML integration audit):
+  - `46bc0c3` — `get_inference_service()` falls back to MLflow `load_champion_service('PumpAD','champion')` when `PUMPAD_MODEL_DIR` is empty/invalid; `MLFLOW_TRACKING_URI=http://mlflow:5000` set on app service in dev compose. Partial mitigation for the §5 "alias polling" gap — cold start is now wired; runtime polling still TODO.
+  - `8788e83` — Persistence writes anomaly observation as a single ClickHouse row `measurement='anomaly_score'`, `value_float=score`, `value_int=flag`. Dashboard live-sensors + anomaly-history charts now actually render.
+  - `dd38b06` — Retraining job + seed script write `name` / `version` / `activated_at` (additive) on `pumpad:active:model` Redis key. Dashboard Model Registry page no longer shows N/A.
 
 ## Remaining
 
 ### Week 5 — Observability + Polish (remainder)
 
-- [ ] Slide deck → `docs/presentation/` (follow §13 demo storyboard, 13–14 min). Include MLflow Compare-Runs screenshots from experiment `pump_sentinel_model_comparison` and the per-iteration curves (LSTM-AE epoch loss, XGB/LGBM logloss-per-round).
+- [ ] Slide deck → `docs/presentation/` (follow §13 demo storyboard, 13–14 min). Include MLflow Compare-Runs screenshots from experiment `pump_sentinel_model_comparison` and the per-iteration curves (LSTM-AE epoch loss, XGB/LGBM logloss-per-round). Pull from `labeling-strategy-notes.md` for industry/academic backing.
 - [ ] ADR docs → `docs/adr/` (key decisions: honest-eval split strategy, no point-adjustment, champion-challenger gate, MLflow alias pattern, MLflow Datasets + traceability tags choices).
-- [ ] Demo script automation (one-command live-demo runner per §13.1 T+0…T+8).
+- [ ] Demo script automation (one-command live-demo runner per `§13.1` T+0…T+8: replay → drift inject → retrain trigger → champion v2 promote → dashboard recover).
 - [ ] Proposal final pass (`docs/proposal.md`).
-- [ ] README polish.
+- [ ] README polish — surface `make mlflow-report`, MQTT topics `factory/skab/{station}/telemetry` and `factory/skab/{station}/anomaly`, and known limitations (no auto-refresh, synchronous inference path).
 
 ### Week 6 — Buffer
 
@@ -32,7 +38,25 @@ Status snapshot grounded in `git log` (HEAD `2ac6f9a`, ahead of `origin/main`) a
 - [ ] Presentation practice (timed dry-run).
 - [ ] Backup demo video recording.
 
-## Parked technical follow-ups
+### Architectural follow-ups (post-MVP, honest gaps)
+
+Documented in `docs/presentation/labeling-strategy-notes.md §5` and surfaced from this sprint's RouteMQ ↔ ML audit. Frame these as "future work" in the deck — they are roadmap, not blockers.
+
+From `labeling-strategy-notes.md §5`:
+
+- [ ] **Operator label intake** — `app/controllers/label_controller.py` (NEW) + `infra/clickhouse/init.sql` extend (labels table) + dashboard triage UI on anomaly-history page so operators can confirm/reject anomalies.
+- [ ] **Supervised promotion in retraining loop** — `app/jobs/retraining_job.py:76-90` extension to dispatch supervised training when labeled data accumulates.
+- [ ] **Supervised training alias setter** — `ml/training/train_supervised.py:816-850` accepts `alias` arg but does not actually set the alias in the MLflow registry. Wire it.
+- [ ] **MLflow alias polling in live app** — `app/services/inference.py` add a reload-polling thread so an externally-promoted MLflow `@champion` is picked up without a hot-swap call. (`46bc0c3` added cold-start fallback; runtime polling still missing.)
+- [ ] **DriftReportJob APScheduler hook** — `ml/monitoring/scheduler.py` add a drift hook so the drift → retrain chain runs automatically. Today the job exists but is not scheduled, so the chain is manual.
+
+From RouteMQ ↔ ML integration audit (this session):
+
+- [ ] **Streamlit dashboard auto-refresh** — `dashboard/app.py` add `streamlit-autorefresh` or equivalent polling so the operator sees live state without manual reload.
+- [ ] **Alert mechanism beyond MQTT publish** — current implementation only publishes to `factory/skab/{station}/anomaly`; add at minimum a structured log alert at controller or persistence layer, optionally Slack/email/webhook for production.
+- [ ] **Reconcile Queue → Worker claim** — `README.md` and `design.md` claim a Queue → Worker pattern for anomaly inference; reality is synchronous in the controller (`app/controllers/anomaly_controller.py:18-23`). Either implement async queue dispatch OR update docs to reflect the synchronous flow.
+
+### Parked technical follow-ups
 
 - [ ] **Reproducible supervised in-distribution split** — commit a manifest or `make` target for the chrono 80/20 (Kaggle-comparable) split and add it as an opt-in family in `scripts/train_all_for_comparison.py` so the ~0.90 in-distribution number lands in the same experiment for the report. (The cross-group supervised split is already wired.)
 - [ ] **Deferred: live spectral/enriched serving** — extend the inference/observe service to compute spectral/enriched features online so a spectral/enriched/supervised model can be SERVED live. Live champion currently serves raw-feature PCA only; spectral/enriched wins are offline-eval only.
