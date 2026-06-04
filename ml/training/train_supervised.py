@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from importlib import import_module
 from pathlib import Path
@@ -633,6 +633,7 @@ def _log_supervised_training_run_safely(result: SupervisedTrainingResult, model:
             }
             if numeric_metrics:
                 mlflow.log_metrics(numeric_metrics)
+            _log_boosting_eval_curves(mlflow, model, config)
             mlflow.log_artifacts(str(result.output_dir))
             mlflow_sklearn.log_model(
                 model,
@@ -641,6 +642,59 @@ def _log_supervised_training_run_safely(result: SupervisedTrainingResult, model:
             )
     except Exception:
         return
+
+
+def _log_boosting_eval_curves(mlflow: Any, model: Any, config: SupervisedTrainingConfig) -> None:
+    evals_result = _evals_result(model)
+    if not isinstance(evals_result, Mapping) or not evals_result:
+        return
+
+    family_key = 'xgb' if config.model_type == 'xgboost' else 'lgbm'
+    dataset_items = list(evals_result.items())
+    for dataset_index, (dataset_name, metrics_by_name) in enumerate(dataset_items):
+        if not isinstance(metrics_by_name, Mapping):
+            continue
+        dataset_key = _eval_dataset_key(str(dataset_name), dataset_index, len(dataset_items))
+        for metric_name, values in metrics_by_name.items():
+            metric_key = f'{dataset_key}_{family_key}_{_metric_key(str(metric_name))}_round'
+            for step, value in enumerate(values or []):
+                try:
+                    metric_value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not np.isfinite(metric_value):
+                    continue
+                mlflow.log_metric(metric_key, metric_value, step=int(step))
+
+
+def _evals_result(model: Any) -> Any:
+    attr_result = getattr(model, 'evals_result_', None)
+    if attr_result:
+        return attr_result
+    method = getattr(model, 'evals_result', None)
+    if not callable(method):
+        return None
+    try:
+        return method()
+    except Exception:
+        return None
+
+
+def _eval_dataset_key(dataset_name: str, index: int, total: int) -> str:
+    normalized = dataset_name.lower()
+    if 'train' in normalized:
+        return 'train'
+    if total > 1 and index == 0:
+        return 'train'
+    if 'valid' in normalized or 'eval' in normalized or 'validation' in normalized:
+        return 'val'
+    if total > 1 and index == total - 1:
+        return 'val'
+    return _metric_key(normalized)
+
+
+def _metric_key(metric_name: str) -> str:
+    return ''.join(char if char.isalnum() else '_' for char in metric_name.lower()).strip('_') or 'metric'
 
 
 def _require_two_training_classes(labels: np.ndarray) -> None:

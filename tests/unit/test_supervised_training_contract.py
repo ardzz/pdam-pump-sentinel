@@ -1,5 +1,9 @@
 import json
+import sys
+import types
 from importlib import import_module
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -22,6 +26,16 @@ def _joblib():
 
 def _train_supervised():
     return import_module('ml.training.train_supervised')
+
+
+class _FakeRun:
+    info = SimpleNamespace(run_id='run-curve')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
 
 
 def _write_skab_csv(path, row_count=24, anomaly_start=None, offset=0.0, changepoint_indices=None):
@@ -131,3 +145,48 @@ def test_train_supervised_writes_artifacts_and_evaluate_split_metrics(tmp_path, 
     scaler = _joblib().load(result.artifact_paths['scaler'])
     assert model.n_features_in_ == 94
     assert scaler.n_features_in_ == 94
+
+
+@pytest.mark.parametrize(
+    ('model_type', 'evals_result', 'expected_key'),
+    [
+        ('xgboost', {'validation_0': {'logloss': [0.9, 0.7, 0.5]}}, 'val_xgb_logloss_round'),
+        ('lightgbm', {'valid_0': {'binary_logloss': [0.8, 0.6, 0.4]}}, 'val_lgbm_binary_logloss_round'),
+    ],
+)
+def test_log_supervised_training_run_streams_boosting_round_metrics(monkeypatch, tmp_path, model_type, evals_result, expected_key):
+    train_supervised = _train_supervised()
+    calls = {'metric': [], 'metrics': [], 'params': [], 'artifacts': [], 'models': []}
+    mlflow = types.ModuleType('mlflow')
+    sklearn = types.ModuleType('mlflow.sklearn')
+    mlflow_any = cast(Any, mlflow)
+    sklearn_any = cast(Any, sklearn)
+
+    mlflow_any.start_run = lambda: _FakeRun()
+    mlflow_any.log_params = lambda params: calls['params'].append(dict(params))
+    mlflow_any.log_metrics = lambda metrics: calls['metrics'].append(dict(metrics))
+    mlflow_any.log_metric = lambda key, value, step=None: calls['metric'].append((key, float(value), step))
+    mlflow_any.log_artifacts = lambda path: calls['artifacts'].append(path)
+    sklearn_any.log_model = lambda model, *, name, registered_model_name=None: calls['models'].append(
+        (name, registered_model_name)
+    )
+    monkeypatch.setitem(sys.modules, 'mlflow', mlflow)
+    monkeypatch.setitem(sys.modules, 'mlflow.sklearn', sklearn)
+
+    output_dir = tmp_path / 'artifacts'
+    output_dir.mkdir()
+    result = SimpleNamespace(output_dir=output_dir, params={'model_type': model_type}, metrics={'f1': 0.25})
+    model = SimpleNamespace(evals_result_=evals_result)
+    config = train_supervised.SupervisedTrainingConfig(
+        input_path=tmp_path / 'unused.csv',
+        output_dir=output_dir,
+        model_type=model_type,
+        registered_model_name='PumpAD',
+    )
+
+    train_supervised._log_supervised_training_run_safely(result, model, config)
+
+    round_calls = [call for call in calls['metric'] if call[0] == expected_key]
+    assert len(round_calls) >= 2
+    assert [call[2] for call in round_calls] == sorted(call[2] for call in round_calls)
+    assert [call[2] for call in round_calls] == list(range(len(round_calls)))
