@@ -43,10 +43,10 @@ install:
 	uv sync
 
 dev:
-	docker compose -f infra/docker-compose.dev.yml up -d
+	docker compose -f infra/docker-compose.dev.yml --env-file infra/.env up -d
 
 dev-down:
-	docker compose -f infra/docker-compose.dev.yml down
+	docker compose -f infra/docker-compose.dev.yml --env-file infra/.env down
 
 run:
 	uv run python -m bootstrap.app
@@ -89,7 +89,7 @@ format:
 	uv run ruff format .
 
 ps:
-	docker compose -f infra/docker-compose.dev.yml ps
+	docker compose -f infra/docker-compose.dev.yml --env-file infra/.env ps
 
 logs:
-	docker compose -f infra/docker-compose.dev.yml logs -f
+	docker compose -f infra/docker-compose.dev.yml --env-file infra/.env logs -f
