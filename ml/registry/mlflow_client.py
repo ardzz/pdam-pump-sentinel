@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Mapping
+from contextlib import nullcontext
 from dataclasses import fields, is_dataclass
 from importlib import import_module
 from numbers import Real
@@ -134,34 +135,83 @@ def log_lstm_ae_training_run(result: Any, model: Any, config: Any) -> str | None
         if tracking_uri:
             mlflow.set_tracking_uri(tracking_uri)
 
-        run_id: str | None = None
         registered_model_name = _registered_model_name(config)
+        active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
+        if active_run is not None:
+            run_id = _run_id(active_run)
+            _log_lstm_ae_training_run_to_active_run(
+                mlflow,
+                mlflow_tensorflow,
+                result,
+                model,
+                config,
+                registered_model_name,
+                run_id,
+            )
+            return run_id
 
         with mlflow.start_run() as run:
             run_id = _run_id(run)
-
-            params = _collect_params(config, result)
-            if params:
-                mlflow.log_params(params)
-
-            metrics = _collect_metrics(result)
-            if metrics:
-                mlflow.log_metrics(metrics)
-
-            output_dir = _result_output_dir(result)
-            if output_dir is not None and output_dir.exists():
-                mlflow.log_artifacts(str(output_dir))
-
-            model_info = mlflow_tensorflow.log_model(
+            _log_lstm_ae_training_run_to_active_run(
+                mlflow,
+                mlflow_tensorflow,
+                result,
                 model,
-                name=LSTM_AE_MODEL_ARTIFACT_NAME,
-                registered_model_name=registered_model_name,
+                config,
+                registered_model_name,
+                run_id,
             )
-            _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
 
         return run_id
     except Exception:
         return None
+
+
+def start_lstm_ae_training_run(config: Any) -> Any | None:
+    try:
+        mlflow = import_module('mlflow')
+    except ImportError:
+        return None
+
+    try:
+        tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+        active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
+        if active_run is not None:
+            return nullcontext(active_run)
+        return mlflow.start_run()
+    except Exception:
+        return None
+
+
+def _log_lstm_ae_training_run_to_active_run(
+    mlflow: Any,
+    mlflow_tensorflow: Any,
+    result: Any,
+    model: Any,
+    config: Any,
+    registered_model_name: str | None,
+    run_id: str | None,
+) -> None:
+    params = _collect_params(config, result)
+    if params:
+        mlflow.log_params(params)
+
+    metrics = _collect_metrics(result)
+    if metrics:
+        mlflow.log_metrics(metrics)
+
+    output_dir = _result_output_dir(result)
+    if output_dir is not None and output_dir.exists():
+        mlflow.log_artifacts(str(output_dir))
+
+    model_info = mlflow_tensorflow.log_model(
+        model,
+        name=LSTM_AE_MODEL_ARTIFACT_NAME,
+        registered_model_name=registered_model_name,
+    )
+    _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
 
 
 def _looks_like_model_dir(model_dir: Path) -> bool:
@@ -327,4 +377,10 @@ def _numeric_metrics(values: Any) -> dict[str, float]:
     return metrics
 
 
-__all__ = ['PcaAnomalyInferenceService', 'load_champion_service', 'log_lstm_ae_training_run', 'log_pca_training_run']
+__all__ = [
+    'PcaAnomalyInferenceService',
+    'load_champion_service',
+    'log_lstm_ae_training_run',
+    'log_pca_training_run',
+    'start_lstm_ae_training_run',
+]

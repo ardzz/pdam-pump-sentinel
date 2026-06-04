@@ -53,15 +53,14 @@ class LstmAeTrainingResult:
 
 def train_lstm_ae_from_skab(config: LstmAeTrainingConfig) -> LstmAeTrainingResult:
     normalized_config = _normalize_config(config)
-    result, model = _fit_and_write_artifacts(normalized_config)
+    mlflow_run_context = _start_mlflow_run_if_requested(normalized_config)
+    if mlflow_run_context is None:
+        result, _ = _fit_and_write_artifacts(normalized_config)
+        return result
 
-    if normalized_config.log_mlflow:
-        try:
-            from ml.registry.mlflow_client import log_lstm_ae_training_run
-
-            log_lstm_ae_training_run(result, model, normalized_config)
-        except Exception:
-            pass
+    with mlflow_run_context:
+        result, model = _fit_and_write_artifacts(normalized_config, log_mlflow_epoch_metrics=True)
+        _log_lstm_ae_training_run_safely(result, model, normalized_config)
 
     return result
 
@@ -73,9 +72,13 @@ def main(argv: Sequence[str] | None = None) -> LstmAeTrainingResult:
     return result
 
 
-def _fit_and_write_artifacts(config: LstmAeTrainingConfig) -> tuple[LstmAeTrainingResult, Any]:
+def _fit_and_write_artifacts(
+    config: LstmAeTrainingConfig,
+    *,
+    log_mlflow_epoch_metrics: bool = False,
+) -> tuple[LstmAeTrainingResult, Any]:
     if config.split_manifest_path is not None:
-        return _fit_and_write_artifacts_split(config)
+        return _fit_and_write_artifacts_split(config, log_mlflow_epoch_metrics=log_mlflow_epoch_metrics)
 
     training_windows = _load_windows(config.input_path, config)
     validation_path = config.validation_input_path or config.input_path
@@ -88,10 +91,15 @@ def _fit_and_write_artifacts(config: LstmAeTrainingConfig) -> tuple[LstmAeTraini
         test_windows=None,
         scaler_fit_paths=[config.input_path],
         provenance_input_files=input_files,
+        log_mlflow_epoch_metrics=log_mlflow_epoch_metrics,
     )
 
 
-def _fit_and_write_artifacts_split(config: LstmAeTrainingConfig) -> tuple[LstmAeTrainingResult, Any]:
+def _fit_and_write_artifacts_split(
+    config: LstmAeTrainingConfig,
+    *,
+    log_mlflow_epoch_metrics: bool = False,
+) -> tuple[LstmAeTrainingResult, Any]:
     split_manifest_path = config.split_manifest_path
     if split_manifest_path is None:
         raise ValueError('split_manifest_path is required for split-manifest training')
@@ -109,6 +117,7 @@ def _fit_and_write_artifacts_split(config: LstmAeTrainingConfig) -> tuple[LstmAe
         scaler_fit_paths=manifest.train,
         provenance_input_files=_split_input_files(config, manifest),
         manifest=manifest,
+        log_mlflow_epoch_metrics=log_mlflow_epoch_metrics,
     )
 
 
@@ -121,6 +130,7 @@ def _fit_and_write_artifacts_common(
     scaler_fit_paths: Sequence[Path],
     provenance_input_files: Sequence[Path],
     manifest: SkabSplitManifest | None = None,
+    log_mlflow_epoch_metrics: bool = False,
 ) -> tuple[LstmAeTrainingResult, Any]:
     train_normal_mask = train_windows.labels == 0
     if len(train_windows.features[train_normal_mask]) == 0:
@@ -144,6 +154,18 @@ def _fit_and_write_artifacts_common(
 
     train_normal_x = train_x[train_normal_mask]
     validation_normal_x = validation_x[validation_normal_mask]
+    fit_callbacks = [
+        keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=config.patience,
+            restore_best_weights=True,
+        )
+    ]
+    if log_mlflow_epoch_metrics:
+        mlflow_callback = _mlflow_epoch_metrics_callback(keras)
+        if mlflow_callback is not None:
+            fit_callbacks.append(mlflow_callback)
+
     model.fit(
         train_normal_x,
         train_normal_x,
@@ -152,13 +174,7 @@ def _fit_and_write_artifacts_common(
         batch_size=config.batch_size,
         shuffle=False,
         verbose=0,
-        callbacks=[
-            keras.callbacks.EarlyStopping(
-                monitor='val_loss',
-                patience=config.patience,
-                restore_best_weights=True,
-            )
-        ],
+        callbacks=fit_callbacks,
     )
 
     validation_normal_scores = _reconstruction_errors(model, validation_normal_x, config.batch_size)
@@ -346,6 +362,50 @@ def _build_model(keras: Any, config: LstmAeTrainingConfig, sensor_count: int) ->
     decoded = keras.layers.LSTM(config.lstm_units, return_sequences=True)(repeated)
     outputs = keras.layers.TimeDistributed(keras.layers.Dense(sensor_count))(decoded)
     return keras.Model(inputs, outputs)
+
+
+def _mlflow_epoch_metrics_callback(keras: Any) -> Any | None:
+    try:
+        mlflow = import_module('mlflow')
+    except ImportError:
+        return None
+
+    def on_epoch_end(epoch: int, logs: dict[str, Any] | None = None) -> None:
+        for metric_name in ('loss', 'val_loss'):
+            value = (logs or {}).get(metric_name)
+            if value is None:
+                continue
+            try:
+                metric_value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(metric_value):
+                continue
+            try:
+                mlflow.log_metric(metric_name, metric_value, step=int(epoch))
+            except Exception:
+                pass
+
+    return keras.callbacks.LambdaCallback(on_epoch_end=on_epoch_end)
+
+
+def _start_mlflow_run_if_requested(config: LstmAeTrainingConfig) -> Any | None:
+    if not config.log_mlflow:
+        return None
+    try:
+        from ml.registry.mlflow_client import start_lstm_ae_training_run
+    except Exception:
+        return None
+    return start_lstm_ae_training_run(config)
+
+
+def _log_lstm_ae_training_run_safely(result: LstmAeTrainingResult, model: Any, config: LstmAeTrainingConfig) -> None:
+    try:
+        from ml.registry.mlflow_client import log_lstm_ae_training_run
+
+        log_lstm_ae_training_run(result, model, config)
+    except Exception:
+        pass
 
 
 def _reconstruction_errors(model: Any, windows: np.ndarray, batch_size: int) -> np.ndarray:
