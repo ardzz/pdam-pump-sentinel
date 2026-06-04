@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from routemq.telemetry import (  # type: ignore[reportMissingImports]
     TelemetryPoint,
     telemetry,
 )
+from routemq.tsdb.telemetry_adapters import (  # type: ignore[reportMissingImports]
+    CLICKHOUSE_TELEMETRY_COLUMNS,
+    ClickHouseTelemetryAdapter,
+)
 
 logger = logging.getLogger('PDAM.persistence')
 
 LATEST_READING_KEY = 'pumpad:latest:reading:{station}'
 LATEST_ANOMALY_KEY = 'pumpad:latest:anomaly:{station}'
+ANOMALY_SCORE_MEASUREMENT = 'anomaly_score'
 
 
 async def persist_telemetry(
@@ -47,28 +53,63 @@ async def _persist_history(
 ) -> None:
     if not telemetry.settings.enabled:
         return
-    measurements: dict[str, Any] = {}
+    sensor_values: dict[str, Any] = {}
     sensors = reading_payload.get('sensors')
     if isinstance(sensors, Mapping):
-        measurements.update(sensors)
-    for name in ('score', 'anomaly'):
-        value = anomaly_payload.get(name)
-        if value is not None:
-            measurements[name] = value
-    if not measurements:
+        sensor_values.update(sensors)
+    if not sensor_values and anomaly_payload.get('score') is None:
         return
     attributes: dict[str, str] = {}
     source_timestamp = reading_payload.get('timestamp')
     if source_timestamp is not None:
         attributes['source_timestamp'] = str(source_timestamp)
     try:
-        point = TelemetryPoint(
-            device_id=station,
-            observed_at=None,
-            measurements=measurements,
-            tags={'station': station},
-            attributes=attributes,
-        )
-        await telemetry.write(point)
+        if sensor_values:
+            point = TelemetryPoint(
+                device_id=station,
+                observed_at=None,
+                measurements=sensor_values,
+                tags={'station': station},
+                attributes=attributes,
+            )
+            await telemetry.write(point)
+        await _persist_anomaly_score_row(station, anomaly_payload, attributes)
     except Exception:
         logger.exception('failed to emit telemetry history point', extra={'station': station})
+
+
+async def _persist_anomaly_score_row(
+    station: str,
+    anomaly_payload: Mapping[str, Any],
+    attributes: Mapping[str, str],
+) -> None:
+    score = anomaly_payload.get('score')
+    if score is None:
+        return
+    adapter = telemetry.adapter
+    if not isinstance(adapter, ClickHouseTelemetryAdapter):
+        return
+    if adapter._client is None:
+        await adapter.connect()
+    anomaly = anomaly_payload.get('anomaly')
+    now = datetime.now(UTC)
+    row = {
+        'observed_at': now,
+        'ingested_at': now,
+        'device_id': station,
+        'measurement': ANOMALY_SCORE_MEASUREMENT,
+        'value_float': float(score),
+        'value_int': int(anomaly) if anomaly is not None else None,
+        'value_string': None,
+        'value_bool': None,
+        'unit': None,
+        'quality': None,
+        'tags': {'station': station},
+        'attributes': dict(attributes),
+        'metadata': {},
+    }
+    await adapter._client.insert(
+        adapter.table,
+        [tuple(row.get(column) for column in CLICKHOUSE_TELEMETRY_COLUMNS)],
+        column_names=list(CLICKHOUSE_TELEMETRY_COLUMNS),
+    )

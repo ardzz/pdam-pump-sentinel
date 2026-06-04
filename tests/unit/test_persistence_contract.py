@@ -1,4 +1,5 @@
 from routemq.settings import TelemetrySettings  # type: ignore[reportMissingImports]
+from routemq.tsdb.telemetry_adapters import ClickHouseTelemetryAdapter  # type: ignore[reportMissingImports]
 
 from app.services import persistence
 
@@ -14,6 +15,14 @@ class FakeRedisManager:
     async def set_json(self, key, value, ex=None, px=None, nx=False, xx=False):
         self.calls.append({'key': key, 'value': value})
         return True
+
+
+class FakeClickHouseClient:
+    def __init__(self):
+        self.inserts = []
+
+    async def insert(self, table, data, column_names):
+        self.inserts.append({'table': table, 'data': data, 'column_names': column_names})
 
 
 def _reading():
@@ -63,12 +72,16 @@ async def test_history_persistence_disabled_by_default(monkeypatch):
 
 async def test_history_persistence_when_enabled(monkeypatch):
     points = []
+    fake_clickhouse = FakeClickHouseClient()
+    adapter = ClickHouseTelemetryAdapter('http://localhost:8123/default')
+    adapter._client = fake_clickhouse
 
     async def fake_write(point):
         points.append(point)
 
     monkeypatch.setattr(persistence.telemetry, 'settings', TelemetrySettings(enabled=True), raising=True)
     monkeypatch.setattr(persistence.telemetry, 'write', fake_write, raising=True)
+    monkeypatch.setattr(persistence.telemetry, 'adapter', adapter, raising=True)
 
     await persistence.persist_telemetry('ipa_01', _reading(), _anomaly())
 
@@ -76,7 +89,36 @@ async def test_history_persistence_when_enabled(monkeypatch):
     point = points[0]
     assert point.device_id == 'ipa_01'
     assert point.measurements['Pressure'].value == 2.1
-    assert point.measurements['score'].value == 0.9
-    assert point.measurements['anomaly'].value == 1
+    assert 'score' not in point.measurements
+    assert 'anomaly' not in point.measurements
     assert point.tags == {'station': 'ipa_01'}
     assert point.attributes['source_timestamp'] == 't0'
+    assert len(fake_clickhouse.inserts) == 1
+    insert = fake_clickhouse.inserts[0]
+    row = dict(zip(insert['column_names'], insert['data'][0]))
+    assert row['device_id'] == 'ipa_01'
+    assert row['measurement'] == 'anomaly_score'
+    assert row['value_float'] == 0.9
+    assert row['value_int'] == 1
+    assert row['tags'] == {'station': 'ipa_01'}
+    assert row['attributes']['source_timestamp'] == 't0'
+
+
+async def test_history_persistence_skips_anomaly_score_when_score_is_none(monkeypatch):
+    points = []
+    fake_clickhouse = FakeClickHouseClient()
+    adapter = ClickHouseTelemetryAdapter('http://localhost:8123/default')
+    adapter._client = fake_clickhouse
+
+    async def fake_write(point):
+        points.append(point)
+
+    monkeypatch.setattr(persistence.telemetry, 'settings', TelemetrySettings(enabled=True), raising=True)
+    monkeypatch.setattr(persistence.telemetry, 'write', fake_write, raising=True)
+    monkeypatch.setattr(persistence.telemetry, 'adapter', adapter, raising=True)
+
+    await persistence.persist_telemetry('ipa_01', _reading(), {'station': 'ipa_01', 'score': None, 'anomaly': None})
+
+    assert len(points) == 1
+    assert points[0].measurements['Pressure'].value == 2.1
+    assert fake_clickhouse.inserts == []

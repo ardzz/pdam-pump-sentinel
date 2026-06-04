@@ -65,7 +65,18 @@ def _raise():
         ('get_latest_anomaly', ('ipa_01',), 'pumpad:latest:anomaly:ipa_01', {'station': 'ipa_01', 'score': 0.91}),
         ('get_drift_result', (), 'pumpad:drift:result', {'dataset_drift': True, 'drift_share': 0.75}),
         ('get_retrain_result', (), 'pumpad:retrain:result', {'promoted': False, 'reason': 'guardrail'}),
-        ('get_active_model', (), 'pumpad:active:model', {'registered_model_name': 'PumpAD', 'alias': 'champion'}),
+        (
+            'get_active_model',
+            (),
+            'pumpad:active:model',
+            {
+                'registered_model_name': 'PumpAD',
+                'alias': 'champion',
+                'name': 'PumpAD',
+                'version': '1',
+                'activated_at': '2026-06-04T00:00:00+00:00',
+            },
+        ),
     ],
 )
 def test_redis_readers_parse_json(monkeypatch, reader_name, args, key, payload):
@@ -101,8 +112,7 @@ def test_redis_readers_return_none_for_parse_failure(monkeypatch):
 
 def test_get_anomaly_history_uses_clickhouse_named_results(monkeypatch):
     rows = [
-        {'observed_at': '2026-06-03T00:00:00', 'measurement': 'score', 'value_float': 0.91, 'value_int': None},
-        {'observed_at': '2026-06-03T00:00:01', 'measurement': 'anomaly', 'value_float': None, 'value_int': 1},
+        {'observed_at': '2026-06-03T00:00:00', 'measurement': 'anomaly_score', 'value_float': 0.91, 'value_int': 1},
     ]
     fake = FakeClickHouseClient(FakeNamedResult(rows))
     monkeypatch.setattr(data, '_clickhouse_client', lambda: fake)
@@ -113,11 +123,11 @@ def test_get_anomaly_history_uses_clickhouse_named_results(monkeypatch):
 
 
 def test_get_anomaly_history_supports_clickhouse_result_rows(monkeypatch):
-    fake = FakeClickHouseClient(FakeRowResult([('2026-06-03T00:00:00', 'score', 0.91, None)]))
+    fake = FakeClickHouseClient(FakeRowResult([('2026-06-03T00:00:00', 'anomaly_score', 0.91, 1)]))
     monkeypatch.setattr(data, '_clickhouse_client', lambda: fake)
 
     assert data.get_anomaly_history('ipa_01', limit=1) == [
-        {'observed_at': '2026-06-03T00:00:00', 'measurement': 'score', 'value_float': 0.91, 'value_int': None}
+        {'observed_at': '2026-06-03T00:00:00', 'measurement': 'anomaly_score', 'value_float': 0.91, 'value_int': 1}
     ]
 
 
