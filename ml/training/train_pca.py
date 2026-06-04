@@ -13,13 +13,15 @@ import numpy as np
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.datasets.skab_manifest import SkabSplitManifest, load_skab_split_manifest
 from ml.evaluation.metrics import evaluate_split
+from ml.features.enriched import build_enriched_window_features
 from ml.features.spectral import build_spectral_window_features
 from ml.features.windowing import WindowedSensorDataset, build_sensor_windows
 from ml.training.pca_detector import PcaT2QDetector
 from ml.utils.provenance import collect_provenance
 
-_FEATURE_MODES = {'raw', 'spectral'}
+_FEATURE_MODES = {'raw', 'spectral', 'enriched'}
 _SPECTRAL_N_BANDS = 4
+_ENRICHED_DOMAIN_FEATURE_COUNT = 6
 
 _METRIC_PROTOCOL = {
     'schema_version': 1,
@@ -312,7 +314,14 @@ def _load_windows(path: Path, config: PcaTrainingConfig) -> WindowedSensorDatase
             sensor_columns=SENSOR_COLUMNS,
         )
 
-    features, labels, changepoints, timestamps = build_spectral_window_features(
+    if config.feature_mode == 'spectral':
+        feature_builder = build_spectral_window_features
+    elif config.feature_mode == 'enriched':
+        feature_builder = build_enriched_window_features
+    else:
+        raise ValueError(f'unsupported feature_mode: {config.feature_mode}')
+
+    features, labels, changepoints, timestamps = feature_builder(
         frame,
         window_size=config.window_size,
         stride=config.stride,
@@ -348,6 +357,8 @@ def _load_windows_multi(paths: list[Path], config: PcaTrainingConfig) -> Windowe
 def _feature_count(config: PcaTrainingConfig) -> int:
     if config.feature_mode == 'spectral':
         return len(SENSOR_COLUMNS) * (_SPECTRAL_N_BANDS + 4)
+    if config.feature_mode == 'enriched':
+        return len(SENSOR_COLUMNS) * (_SPECTRAL_N_BANDS + 7) + _ENRICHED_DOMAIN_FEATURE_COUNT
     return config.window_size * len(SENSOR_COLUMNS)
 
 
