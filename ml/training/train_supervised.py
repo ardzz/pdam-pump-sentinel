@@ -449,32 +449,41 @@ def _fit_lightgbm(
     return model
 
 
-def _xgboost_mlflow_callbacks(xgboost: Any, config: SupervisedTrainingConfig) -> list[Any]:
-    mlflow = _mlflow_module_for_live_boosting()
-    if mlflow is None:
-        return []
+import xgboost.callback as _xgb_callback_module
 
-    family_key = 'xgb'
 
-    class MlflowXGBCallback(xgboost.callback.TrainingCallback):
-        def after_iteration(self, model: Any, epoch: int, evals_log: Mapping[str, Any]) -> bool:
-            dataset_items = list((evals_log or {}).items())
-            for dataset_index, (dataset_name, metrics_by_name) in enumerate(dataset_items):
-                if not isinstance(metrics_by_name, Mapping):
-                    continue
-                dataset_key = _eval_dataset_key(str(dataset_name), dataset_index, len(dataset_items))
-                for metric_name, values in metrics_by_name.items():
-                    if not values:
-                        continue
-                    _log_live_boosting_metric(
-                        mlflow,
-                        f'{dataset_key}_{family_key}_{_metric_key(str(metric_name))}_round',
-                        values[-1],
-                        epoch,
-                    )
+class MlflowXGBCallback(_xgb_callback_module.TrainingCallback):
+    def __init__(self, family_key: str = 'xgb') -> None:
+        super().__init__()
+        self._family_key = family_key
+
+    def after_iteration(self, model: Any, epoch: int, evals_log: Mapping[str, Any]) -> bool:
+        mlflow = _mlflow_module_for_live_boosting()
+        if mlflow is None:
             return False
+        dataset_items = list((evals_log or {}).items())
+        for dataset_index, (dataset_name, metrics_by_name) in enumerate(dataset_items):
+            if not isinstance(metrics_by_name, Mapping):
+                continue
+            dataset_key = _eval_dataset_key(str(dataset_name), dataset_index, len(dataset_items))
+            for metric_name, values in metrics_by_name.items():
+                if not values:
+                    continue
+                _log_live_boosting_metric(
+                    mlflow,
+                    f'{dataset_key}_{self._family_key}_{_metric_key(str(metric_name))}_round',
+                    values[-1],
+                    epoch,
+                )
+        return False
 
-    return [MlflowXGBCallback()] if config.model_type == 'xgboost' else []
+
+def _xgboost_mlflow_callbacks(xgboost: Any, config: SupervisedTrainingConfig) -> list[Any]:
+    if config.model_type != 'xgboost':
+        return []
+    if _mlflow_module_for_live_boosting() is None:
+        return []
+    return [MlflowXGBCallback()]
 
 
 class MlflowLGBMCallback:

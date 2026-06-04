@@ -282,3 +282,12 @@ def test_boosting_callbacks_stream_round_metrics(monkeypatch, tmp_path, model_ty
 
     assert [call[0] for call in calls] == expected_keys
     assert all(call[2] in {3, 4} for call in calls)
+
+
+def test_xgb_mlflow_callback_pickle_roundtrip():
+    import pickle
+    train_supervised = _train_supervised()
+    callback = train_supervised.MlflowXGBCallback()
+    restored = pickle.loads(pickle.dumps(callback))
+    assert isinstance(restored, train_supervised.MlflowXGBCallback)
+    assert restored._family_key == 'xgb'
