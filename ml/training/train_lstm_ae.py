@@ -49,6 +49,8 @@ class LstmAeTrainingResult:
     metrics: dict[str, Any]
     thresholds: dict[str, float]
     sensor_columns: tuple[str, ...]
+    input_example: Any | None = None
+    output_example: Any | None = None
 
 
 def train_lstm_ae_from_skab(config: LstmAeTrainingConfig) -> LstmAeTrainingResult:
@@ -239,6 +241,8 @@ def _fit_and_write_artifacts_common(
         metrics=metrics,
         thresholds=thresholds,
         sensor_columns=train_windows.sensor_columns,
+        input_example=_input_example(train_normal_x),
+        output_example=_output_example(model, _input_example(train_normal_x), config.batch_size),
     )
     _write_json(artifact_paths['metrics'], metrics)
     _write_json(
@@ -581,6 +585,18 @@ def _log_skab_inputs_to_active_run(
         feature_mode='raw',
         split_strategy='unsupervised_novel_fault' if config.split_manifest_path is not None else 'single_csv',
     )
+
+
+def _input_example(windows: np.ndarray) -> np.ndarray | None:
+    if len(windows) == 0:
+        return None
+    return np.asarray(windows[:5], dtype=np.float64)
+
+
+def _output_example(model: Any, input_example: np.ndarray | None, batch_size: int) -> np.ndarray | None:
+    if input_example is None:
+        return None
+    return np.asarray(model.predict(input_example, batch_size=batch_size, verbose=0), dtype=np.float64)
 
 
 def _jsonable_config(config: LstmAeTrainingConfig) -> dict[str, Any]:

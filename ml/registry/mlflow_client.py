@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
+import socket
+import subprocess
+import sys
 from collections.abc import Mapping
 from contextlib import nullcontext
 from dataclasses import fields, is_dataclass
 from importlib import import_module
+from importlib.metadata import PackageNotFoundError, version
 from numbers import Real
 from pathlib import Path
 from typing import Any, Protocol
@@ -16,13 +21,60 @@ from ml.inference.pca_inference import PcaAnomalyInferenceService as PcaAnomalyI
 
 MODEL_ARTIFACT_NAME = 'pca_anomaly_model'
 LSTM_AE_MODEL_ARTIFACT_NAME = 'lstm_ae_model'
+ISOLATION_FOREST_MODEL_ARTIFACT_NAME = 'isolation_forest_model'
 DEFAULT_REGISTERED_MODEL_NAME = 'PumpAD'
 MODEL_DIR_ENV = 'PUMPAD_MODEL_DIR'
+_SYSTEM_METRICS_LOGGING_ATTEMPTED = False
+_SYSTEM_METRICS_WARNING_LOGGED = False
 
 
 class InferenceService(Protocol):
     def observe(self, station: str, timestamp: str | None, sensors: Mapping[str, Any]) -> Any:
         ...
+
+
+def _enable_system_metrics_logging_if_available(mlflow: Any | None = None) -> bool:
+    global _SYSTEM_METRICS_LOGGING_ATTEMPTED, _SYSTEM_METRICS_WARNING_LOGGED
+    if _SYSTEM_METRICS_LOGGING_ATTEMPTED:
+        return True
+    _SYSTEM_METRICS_LOGGING_ATTEMPTED = True
+    try:
+        import_module('psutil')
+    except ImportError:
+        if not _SYSTEM_METRICS_WARNING_LOGGED:
+            print('MLflow system metrics logging skipped: psutil is not installed')
+            _SYSTEM_METRICS_WARNING_LOGGED = True
+        return False
+    if mlflow is None:
+        try:
+            mlflow = import_module('mlflow')
+        except ImportError:
+            return False
+    os.environ.setdefault('MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING', 'true')
+    try:
+        if hasattr(mlflow, 'set_system_metrics_sampling_interval'):
+            mlflow.set_system_metrics_sampling_interval(1)
+        if hasattr(mlflow, 'set_system_metrics_samples_before_logging'):
+            mlflow.set_system_metrics_samples_before_logging(1)
+        if hasattr(mlflow, 'enable_system_metrics_logging'):
+            mlflow.enable_system_metrics_logging()
+        return True
+    except Exception:
+        return False
+
+
+def set_run_traceability_tags(mlflow: Any | None = None) -> dict[str, str]:
+    if mlflow is None:
+        try:
+            mlflow = import_module('mlflow')
+        except ImportError:
+            return {}
+    tags = _run_traceability_tags()
+    try:
+        mlflow.set_tags(tags)
+    except Exception:
+        pass
+    return tags
 
 
 def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
@@ -44,33 +96,52 @@ def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
     tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
     if tracking_uri:
         mlflow.set_tracking_uri(tracking_uri)
+    _enable_system_metrics_logging_if_available(mlflow)
 
     run_id: str | None = None
     registered_model_name = _registered_model_name(config)
+    active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
+    if active_run is not None:
+        run_id = _run_id(active_run)
+        _log_pca_training_run_to_active_run(mlflow, mlflow_sklearn, result, detector, config, registered_model_name, run_id)
+        return run_id
 
     with mlflow.start_run() as run:
         run_id = _run_id(run)
-
-        params = _collect_params(config, result)
-        if params:
-            mlflow.log_params(params)
-
-        metrics = _collect_metrics(result)
-        if metrics:
-            mlflow.log_metrics(metrics)
-
-        output_dir = _result_output_dir(result)
-        if output_dir is not None and output_dir.exists():
-            mlflow.log_artifacts(str(output_dir))
-
-        model_info = mlflow_sklearn.log_model(
-            detector,
-            name=MODEL_ARTIFACT_NAME,
-            registered_model_name=registered_model_name,
-        )
-        _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
+        _log_pca_training_run_to_active_run(mlflow, mlflow_sklearn, result, detector, config, registered_model_name, run_id)
 
     return run_id
+
+
+def _log_pca_training_run_to_active_run(
+    mlflow: Any,
+    mlflow_sklearn: Any,
+    result: Any,
+    detector: Any,
+    config: Any,
+    registered_model_name: str | None,
+    run_id: str | None,
+) -> None:
+    set_run_traceability_tags(mlflow)
+    params = _collect_params(config, result)
+    if params:
+        mlflow.log_params(params)
+
+    metrics = _collect_metrics(result)
+    if metrics:
+        mlflow.log_metrics(metrics)
+
+    output_dir = _result_output_dir(result)
+    if output_dir is not None and output_dir.exists():
+        mlflow.log_artifacts(str(output_dir))
+
+    model_info = mlflow_sklearn.log_model(
+        detector,
+        name=MODEL_ARTIFACT_NAME,
+        registered_model_name=registered_model_name,
+        **_model_signature_kwargs(result),
+    )
+    _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
 
 
 def skab_window_dataframe(dataset: Any, *, normal_only: bool = False) -> Any | None:
@@ -221,6 +292,7 @@ def log_lstm_ae_training_run(result: Any, model: Any, config: Any) -> str | None
         tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
         if tracking_uri:
             mlflow.set_tracking_uri(tracking_uri)
+        _enable_system_metrics_logging_if_available(mlflow)
 
         registered_model_name = _registered_model_name(config)
         active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
@@ -254,6 +326,50 @@ def log_lstm_ae_training_run(result: Any, model: Any, config: Any) -> str | None
         return None
 
 
+def log_isoforest_training_run(result: Any, model: Any, config: Any) -> str | None:
+    try:
+        mlflow = import_module('mlflow')
+        mlflow_sklearn = import_module('mlflow.sklearn')
+    except ImportError:
+        return None
+
+    try:
+        tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+        _enable_system_metrics_logging_if_available(mlflow)
+
+        registered_model_name = _registered_model_name(config)
+        active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
+        if active_run is not None:
+            run_id = _run_id(active_run)
+            _log_isoforest_training_run_to_active_run(
+                mlflow,
+                mlflow_sklearn,
+                result,
+                model,
+                config,
+                registered_model_name,
+                run_id,
+            )
+            return run_id
+
+        with mlflow.start_run() as run:
+            run_id = _run_id(run)
+            _log_isoforest_training_run_to_active_run(
+                mlflow,
+                mlflow_sklearn,
+                result,
+                model,
+                config,
+                registered_model_name,
+                run_id,
+            )
+        return run_id
+    except Exception:
+        return None
+
+
 def start_lstm_ae_training_run(config: Any) -> Any | None:
     try:
         mlflow = import_module('mlflow')
@@ -264,6 +380,7 @@ def start_lstm_ae_training_run(config: Any) -> Any | None:
         tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
         if tracking_uri:
             mlflow.set_tracking_uri(tracking_uri)
+        _enable_system_metrics_logging_if_available(mlflow)
         active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
         if active_run is not None:
             return nullcontext(active_run)
@@ -281,6 +398,7 @@ def _log_lstm_ae_training_run_to_active_run(
     registered_model_name: str | None,
     run_id: str | None,
 ) -> None:
+    set_run_traceability_tags(mlflow)
     params = _collect_params(config, result)
     if params:
         mlflow.log_params(params)
@@ -297,6 +415,38 @@ def _log_lstm_ae_training_run_to_active_run(
         model,
         name=LSTM_AE_MODEL_ARTIFACT_NAME,
         registered_model_name=registered_model_name,
+        **_model_signature_kwargs(result),
+    )
+    _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
+
+
+def _log_isoforest_training_run_to_active_run(
+    mlflow: Any,
+    mlflow_sklearn: Any,
+    result: Any,
+    model: Any,
+    config: Any,
+    registered_model_name: str | None,
+    run_id: str | None,
+) -> None:
+    set_run_traceability_tags(mlflow)
+    params = _collect_params(config, result)
+    if params:
+        mlflow.log_params(params)
+
+    metrics = _collect_metrics(result)
+    if metrics:
+        mlflow.log_metrics(metrics)
+
+    output_dir = _result_output_dir(result)
+    if output_dir is not None and output_dir.exists():
+        mlflow.log_artifacts(str(output_dir))
+
+    model_info = mlflow_sklearn.log_model(
+        model,
+        name=ISOLATION_FOREST_MODEL_ARTIFACT_NAME,
+        registered_model_name=registered_model_name,
+        **_model_signature_kwargs(result),
     )
     _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
 
@@ -464,13 +614,69 @@ def _numeric_metrics(values: Any) -> dict[str, float]:
     return metrics
 
 
+def _model_signature_kwargs(result: Any) -> dict[str, Any]:
+    input_example = _lookup(result, 'input_example', None)
+    if input_example is None:
+        return {}
+    output_example = _lookup(result, 'output_example', None)
+    try:
+        mlflow_models = import_module('mlflow.models')
+        signature = mlflow_models.infer_signature(input_example, output_example)
+    except Exception:
+        return {'input_example': input_example}
+    return {'signature': signature, 'input_example': input_example}
+
+
+def _run_traceability_tags() -> dict[str, str]:
+    tags = {
+        'git.commit.sha': _git_output('rev-parse', 'HEAD') or 'unknown',
+        'git.branch': _git_output('branch', '--show-current') or 'unknown',
+        'git.is_dirty': 'true' if _git_output('status', '--short') else 'false',
+        'python.version': sys.version.split()[0],
+        'host.name': socket.gethostname(),
+    }
+    for package_name, tag_name in (
+        ('mlflow', 'package.mlflow'),
+        ('scikit-learn', 'package.scikit-learn'),
+        ('tensorflow', 'package.tensorflow'),
+        ('xgboost', 'package.xgboost'),
+        ('lightgbm', 'package.lightgbm'),
+    ):
+        tags[tag_name] = _package_version(package_name)
+    return tags
+
+
+def _git_output(*args: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ['git', *args],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            env=os.environ | {'GIT_TERMINAL_PROMPT': '0'},
+        )
+    except Exception:
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
+
+
+def _package_version(package_name: str) -> str:
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return 'not-installed'
+    except Exception:
+        return 'unknown'
+
+
 def _manifest_sha256(path: Path | None, manifest_dict: Mapping[str, Any] | None) -> str:
     if path is not None and path.exists():
         return hashlib.sha256(path.read_bytes()).hexdigest()
     if manifest_dict is None:
         return hashlib.sha256(b'').hexdigest()
-    import json
-
     payload = json.dumps(manifest_dict, sort_keys=True, separators=(',', ':')).encode('utf-8')
     return hashlib.sha256(payload).hexdigest()
 
@@ -483,10 +689,13 @@ def _dataset_source_uri(path: Path | None, split_name: str) -> str:
 
 __all__ = [
     'PcaAnomalyInferenceService',
+    '_enable_system_metrics_logging_if_available',
     'load_champion_service',
+    'log_isoforest_training_run',
     'log_skab_inputs_to_active_run',
     'log_lstm_ae_training_run',
     'log_pca_training_run',
+    'set_run_traceability_tags',
     'skab_window_dataframe',
     'start_lstm_ae_training_run',
 ]

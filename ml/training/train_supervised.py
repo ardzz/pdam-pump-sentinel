@@ -60,6 +60,8 @@ class SupervisedTrainingResult:
     metrics: dict[str, Any]
     thresholds: dict[str, float]
     sensor_columns: tuple[str, ...]
+    input_example: Any | None = None
+    output_example: Any | None = None
 
 
 def train_supervised_from_skab(config: SupervisedTrainingConfig) -> SupervisedTrainingResult:
@@ -204,6 +206,8 @@ def _fit_and_write_artifacts_common(
         metrics=metrics,
         thresholds=thresholds,
         sensor_columns=train_windows.sensor_columns,
+        input_example=_input_example(train_x),
+        output_example=_output_example(model, _input_example(train_x)),
     )
     _write_json(artifact_paths['metrics'], metrics)
     _write_json(
@@ -211,6 +215,8 @@ def _fit_and_write_artifacts_common(
         _metadata_payload(config, result, provenance_input_files, manifest, train_windows, validation_windows, test_windows),
     )
     _log_skab_inputs_to_active_run(config, manifest, train_windows, validation_windows, test_windows)
+    if not config.log_mlflow and _mlflow_module_for_live_boosting() is not None:
+        _log_supervised_training_run_safely(result, model, config)
     return result, model
 
 
@@ -744,6 +750,18 @@ def _log_skab_inputs_to_active_run(
     )
 
 
+def _input_example(features: np.ndarray) -> np.ndarray | None:
+    if len(features) == 0:
+        return None
+    return np.asarray(features[:5], dtype=np.float64)
+
+
+def _output_example(model: Any, input_example: np.ndarray | None) -> np.ndarray | None:
+    if input_example is None:
+        return None
+    return np.asarray(model.predict_proba(input_example), dtype=np.float64)
+
+
 def _dump_joblib(value: Any, path: Path) -> None:
     joblib = import_module('joblib')
     joblib.dump(value, path)
@@ -757,6 +775,12 @@ def _start_mlflow_run_if_requested(config: SupervisedTrainingConfig) -> Any | No
     except ImportError:
         return None
     try:
+        try:
+            from ml.registry.mlflow_client import _enable_system_metrics_logging_if_available
+
+            _enable_system_metrics_logging_if_available(mlflow)
+        except Exception:
+            pass
         active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
         if active_run is not None:
             return nullcontext(active_run)
@@ -789,6 +813,12 @@ def _log_supervised_training_run_to_active_run(
     model: Any,
     config: SupervisedTrainingConfig,
 ) -> None:
+    try:
+        from ml.registry.mlflow_client import set_run_traceability_tags
+
+        set_run_traceability_tags(mlflow)
+    except Exception:
+        pass
     scalar_params = {
         name: value
         for name, value in result.params.items()
@@ -809,6 +839,7 @@ def _log_supervised_training_run_to_active_run(
         model,
         name=f'{config.model_type}_model',
         registered_model_name=config.registered_model_name if config.register_model else None,
+        **_model_signature_kwargs(result),
     )
 
 
@@ -835,6 +866,17 @@ def _log_boosting_eval_curves(mlflow: Any, model: Any, config: SupervisedTrainin
                 if not np.isfinite(metric_value):
                     continue
                 mlflow.log_metric(metric_key, metric_value, step=int(step))
+
+
+def _model_signature_kwargs(result: SupervisedTrainingResult) -> dict[str, Any]:
+    if result.input_example is None:
+        return {}
+    try:
+        mlflow_models = import_module('mlflow.models')
+        signature = mlflow_models.infer_signature(result.input_example, result.output_example)
+    except Exception:
+        return {'input_example': result.input_example}
+    return {'signature': signature, 'input_example': result.input_example}
 
 
 def _evals_result(model: Any) -> Any:

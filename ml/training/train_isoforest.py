@@ -52,11 +52,17 @@ class IsoForestTrainingResult:
     metrics: dict[str, Any]
     thresholds: dict[str, float]
     sensor_columns: tuple[str, ...]
+    input_example: Any | None = None
+    output_example: Any | None = None
 
 
 def train_isoforest_from_skab(config: IsoForestTrainingConfig) -> IsoForestTrainingResult:
     normalized_config = _normalize_config(config)
-    result, _model = _fit_and_write_artifacts(normalized_config)
+    result, model = _fit_and_write_artifacts(normalized_config)
+    if normalized_config.log_mlflow or _active_mlflow_run_exists():
+        from ml.registry.mlflow_client import log_isoforest_training_run
+
+        log_isoforest_training_run(result, model, normalized_config)
     return result
 
 
@@ -199,6 +205,8 @@ def _fit_and_write_artifacts_common(
         metrics=metrics,
         thresholds=thresholds,
         sensor_columns=train_windows.sensor_columns,
+        input_example=_input_example(train_normal_x),
+        output_example=_output_example(model, _input_example(train_normal_x)),
     )
     _write_json(artifact_paths['metrics'], metrics)
     _write_json(
@@ -515,6 +523,27 @@ def _log_skab_inputs_to_active_run(
         feature_mode=config.feature_mode,
         split_strategy='unsupervised_novel_fault' if config.split_manifest_path is not None else 'single_csv',
     )
+
+
+def _active_mlflow_run_exists() -> bool:
+    try:
+        mlflow = import_module('mlflow')
+        active_run = getattr(mlflow, 'active_run', None)
+        return bool(active_run()) if callable(active_run) else False
+    except Exception:
+        return False
+
+
+def _input_example(features: np.ndarray) -> np.ndarray | None:
+    if len(features) == 0:
+        return None
+    return np.asarray(features[:5], dtype=np.float64)
+
+
+def _output_example(model: IsolationForest, input_example: np.ndarray | None) -> np.ndarray | None:
+    if input_example is None:
+        return None
+    return _anomaly_scores(model, input_example)
 
 
 def _feature_count(feature_mode: str, window_size: int, sensor_count: int) -> int:
