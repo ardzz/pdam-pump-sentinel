@@ -1,4 +1,4 @@
-.PHONY: help install dev dev-down run queue-work replay inject-drift retrain dashboard mlflow skab-eda train-pca train-pca-split test lint format ps logs
+.PHONY: help install dev dev-down run queue-work replay inject-drift retrain dashboard mlflow mlflow-report skab-eda train-pca train-pca-split test lint format ps logs
 
 PYTHON ?= uv run python
 SKAB_EDA ?= $(PYTHON) scripts/generate_skab_eda.py
@@ -17,6 +17,9 @@ PCA_THRESHOLD_QUANTILE ?= 0.95
 PCA_COMMON_ARGS ?= --window-size $(PCA_WINDOW_SIZE) --stride $(PCA_STRIDE) --threshold-quantile $(PCA_THRESHOLD_QUANTILE)
 PCA_EXTRA_ARGS ?=
 PCA_SPLIT_ARGS ?= $(PCA_SPLIT_OUTPUT_DIR) --split-manifest $(PCA_SPLIT_MANIFEST)
+MLFLOW_REPORT_PORT ?= 5050
+MLFLOW_REPORT_BACKEND ?= sqlite:///data/mlflow_live.db
+MLFLOW_REPORT_ARTIFACTS ?= $(CURDIR)/data/mlflow_server_artifacts
 
 help:
 	@echo "PDAM Pump Sentinel - available targets:"
@@ -29,7 +32,8 @@ help:
 	@echo "  inject-drift Inject synthetic sensor drift (demo)"
 	@echo "  retrain      Manually trigger retraining"
 	@echo "  dashboard    Launch Streamlit dashboard"
-	@echo "  mlflow       Launch MLflow UI"
+	@echo "  mlflow       Launch MLflow UI (legacy file store)"
+	@echo "  mlflow-report Launch MLflow report server against data/mlflow_live.db on MLFLOW_REPORT_PORT (default 5050)"
 	@echo "  skab-eda     Generate SKAB EDA report artifacts"
 	@echo "  train-pca    Train PCA from a single CSV smoke input"
 	@echo "  train-pca-split Train PCA from PCA_SPLIT_MANIFEST"
@@ -68,6 +72,14 @@ dashboard:
 
 mlflow:
 	uv run mlflow ui --host 0.0.0.0 --port 5000
+
+mlflow-report:
+	uv run mlflow server \
+		--host 0.0.0.0 \
+		--port $(MLFLOW_REPORT_PORT) \
+		--backend-store-uri $(MLFLOW_REPORT_BACKEND) \
+		--serve-artifacts \
+		--artifacts-destination $(MLFLOW_REPORT_ARTIFACTS)
 
 skab-eda:
 	$(SKAB_EDA) --input $(SKAB_EDA_INPUT) --output-dir $(SKAB_EDA_OUTPUT_DIR) $(if $(SKAB_EDA_SPLIT_MANIFEST),--split-manifest $(SKAB_EDA_SPLIT_MANIFEST),) $(SKAB_EDA_EXTRA_ARGS)
