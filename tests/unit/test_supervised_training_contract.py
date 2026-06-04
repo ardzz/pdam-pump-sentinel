@@ -190,3 +190,95 @@ def test_log_supervised_training_run_streams_boosting_round_metrics(monkeypatch,
     assert len(round_calls) >= 2
     assert [call[2] for call in round_calls] == sorted(call[2] for call in round_calls)
     assert [call[2] for call in round_calls] == list(range(len(round_calls)))
+
+
+def test_train_supervised_starts_mlflow_run_before_fit(monkeypatch, tmp_path):
+    train_supervised = _train_supervised()
+    state = {'active': False, 'fit_active': False, 'logged': False}
+    mlflow = types.ModuleType('mlflow')
+    sklearn = types.ModuleType('mlflow.sklearn')
+    mlflow_any = cast(Any, mlflow)
+
+    class Run:
+        def __enter__(self):
+            state['active'] = True
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            state['active'] = False
+            return False
+
+    mlflow_any.start_run = lambda: Run()
+    mlflow_any.active_run = lambda: object() if state['active'] else None
+    monkeypatch.setitem(sys.modules, 'mlflow', mlflow)
+    monkeypatch.setitem(sys.modules, 'mlflow.sklearn', sklearn)
+
+    def fit_and_write(config):
+        state['fit_active'] = state['active']
+        output_dir = tmp_path / 'artifacts'
+        output_dir.mkdir()
+        result = SimpleNamespace(output_dir=output_dir, params={}, metrics={})
+        return result, object()
+
+    def log_run(result, model, config):
+        state['logged'] = state['active']
+
+    monkeypatch.setattr(train_supervised, '_fit_and_write_artifacts', fit_and_write)
+    monkeypatch.setattr(train_supervised, '_log_supervised_training_run_safely', log_run)
+
+    train_supervised.train_supervised_from_skab(
+        train_supervised.SupervisedTrainingConfig(
+            input_path=tmp_path / 'unused.csv',
+            output_dir=tmp_path / 'artifacts',
+            log_mlflow=True,
+        )
+    )
+
+    assert state['fit_active'] is True
+    assert state['logged'] is True
+
+
+@pytest.mark.parametrize(
+    ('model_type', 'callback_factory', 'payload', 'expected_keys'),
+    [
+        (
+            'xgboost',
+            'xgb',
+            {'validation_0': {'logloss': [0.9]}, 'validation_1': {'logloss': [0.7]}},
+            ['train_xgb_logloss_round', 'val_xgb_logloss_round'],
+        ),
+        (
+            'lightgbm',
+            'lgbm',
+            [('train', 'binary_logloss', 0.8, False), ('validation', 'binary_logloss', 0.6, False)],
+            ['train_lgbm_binary_logloss_round', 'val_lgbm_binary_logloss_round'],
+        ),
+    ],
+)
+def test_boosting_callbacks_stream_round_metrics(monkeypatch, tmp_path, model_type, callback_factory, payload, expected_keys):
+    train_supervised = _train_supervised()
+    calls = []
+    mlflow = types.ModuleType('mlflow')
+    mlflow_any = cast(Any, mlflow)
+    mlflow_any.active_run = lambda: object()
+    mlflow_any.log_metric = lambda key, value, step=None: calls.append((key, float(value), step))
+    monkeypatch.setitem(sys.modules, 'mlflow', mlflow)
+    config = train_supervised.SupervisedTrainingConfig(
+        input_path=tmp_path / 'unused.csv',
+        output_dir=tmp_path / 'artifacts',
+        model_type=model_type,
+    )
+
+    if callback_factory == 'xgb':
+        class TrainingCallback:
+            pass
+
+        xgboost = SimpleNamespace(callback=SimpleNamespace(TrainingCallback=TrainingCallback))
+        callback = train_supervised._xgboost_mlflow_callbacks(xgboost, config)[0]
+        callback.after_iteration(None, 3, payload)
+    else:
+        callback = train_supervised._lightgbm_mlflow_callback(config)
+        callback(SimpleNamespace(evaluation_result_list=payload, iteration=4))
+
+    assert [call[0] for call in calls] == expected_keys
+    assert all(call[2] in {3, 4} for call in calls)

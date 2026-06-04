@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, replace
 from importlib import import_module
 from pathlib import Path
@@ -63,9 +64,15 @@ class SupervisedTrainingResult:
 
 def train_supervised_from_skab(config: SupervisedTrainingConfig) -> SupervisedTrainingResult:
     normalized_config = _normalize_config(config)
-    result, model = _fit_and_write_artifacts(normalized_config)
-    if normalized_config.log_mlflow:
+    mlflow_run_context = _start_mlflow_run_if_requested(normalized_config)
+    if mlflow_run_context is None:
+        result, _model = _fit_and_write_artifacts(normalized_config)
+        return result
+
+    with mlflow_run_context:
+        result, model = _fit_and_write_artifacts(normalized_config)
         _log_supervised_training_run_safely(result, model, normalized_config)
+
     return result
 
 
@@ -384,11 +391,15 @@ def _fit_xgboost(
         'verbosity': 0,
     }
     eval_set = None
+    callbacks = _xgboost_mlflow_callbacks(xgboost, config)
+    if callbacks:
+        model_params['callbacks'] = callbacks
     if config.early_stopping_rounds > 0 and len(validation_x) > 0:
         model_params['early_stopping_rounds'] = config.early_stopping_rounds
-        eval_set = [(validation_x, validation_y)]
+        eval_set = [(train_x, train_y), (validation_x, validation_y)]
     model = xgboost.XGBClassifier(**model_params)
     model.fit(train_x, train_y, eval_set=eval_set, verbose=False)
+    _mark_boosting_curves_live_streamed(model, callbacks)
     return model
 
 
@@ -411,11 +422,115 @@ def _fit_lightgbm(
     )
     callbacks = []
     eval_set = None
+    eval_names = None
     if config.early_stopping_rounds > 0 and len(validation_x) > 0:
         callbacks.append(lightgbm.early_stopping(config.early_stopping_rounds, verbose=False))
-        eval_set = [(validation_x, validation_y)]
-    model.fit(train_x, train_y, eval_set=eval_set, eval_metric='binary_logloss', callbacks=callbacks or None)
+        eval_set = [(train_x, train_y), (validation_x, validation_y)]
+        eval_names = ['train', 'validation']
+    mlflow_callback = _lightgbm_mlflow_callback(config)
+    if mlflow_callback is not None:
+        callbacks.append(mlflow_callback)
+    model.fit(
+        train_x,
+        train_y,
+        eval_set=eval_set,
+        eval_names=eval_names,
+        eval_metric='binary_logloss',
+        callbacks=callbacks or None,
+    )
+    _mark_boosting_curves_live_streamed(model, [mlflow_callback] if mlflow_callback is not None else [])
     return model
+
+
+def _xgboost_mlflow_callbacks(xgboost: Any, config: SupervisedTrainingConfig) -> list[Any]:
+    mlflow = _mlflow_module_for_live_boosting()
+    if mlflow is None:
+        return []
+
+    family_key = 'xgb'
+
+    class MlflowXGBCallback(xgboost.callback.TrainingCallback):
+        def after_iteration(self, model: Any, epoch: int, evals_log: Mapping[str, Any]) -> bool:
+            dataset_items = list((evals_log or {}).items())
+            for dataset_index, (dataset_name, metrics_by_name) in enumerate(dataset_items):
+                if not isinstance(metrics_by_name, Mapping):
+                    continue
+                dataset_key = _eval_dataset_key(str(dataset_name), dataset_index, len(dataset_items))
+                for metric_name, values in metrics_by_name.items():
+                    if not values:
+                        continue
+                    _log_live_boosting_metric(
+                        mlflow,
+                        f'{dataset_key}_{family_key}_{_metric_key(str(metric_name))}_round',
+                        values[-1],
+                        epoch,
+                    )
+            return False
+
+    return [MlflowXGBCallback()] if config.model_type == 'xgboost' else []
+
+
+class MlflowLGBMCallback:
+    order = 25
+    before_iteration = False
+
+    def __init__(self, mlflow: Any):
+        self._mlflow = mlflow
+
+    def __call__(self, env: Any) -> None:
+        results = list(env.evaluation_result_list or [])
+        for dataset_index, item in enumerate(results):
+            dataset_name, metric_name, metric_value, *_ = item
+            dataset_key = _eval_dataset_key(str(dataset_name), dataset_index, len(results))
+            _log_live_boosting_metric(
+                self._mlflow,
+                f'{dataset_key}_lgbm_{_metric_key(str(metric_name))}_round',
+                metric_value,
+                env.iteration,
+            )
+
+
+def _lightgbm_mlflow_callback(config: SupervisedTrainingConfig) -> Any | None:
+    if config.model_type != 'lightgbm':
+        return None
+    mlflow = _mlflow_module_for_live_boosting()
+    return MlflowLGBMCallback(mlflow) if mlflow is not None else None
+
+
+def _mlflow_module_for_live_boosting() -> Any | None:
+    try:
+        mlflow = import_module('mlflow')
+    except ImportError:
+        return None
+    active_run = getattr(mlflow, 'active_run', None)
+    if callable(active_run):
+        try:
+            if active_run() is None:
+                return None
+        except Exception:
+            return None
+    return mlflow
+
+
+def _log_live_boosting_metric(mlflow: Any, key: str, value: Any, step: int) -> None:
+    try:
+        metric_value = float(value)
+    except (TypeError, ValueError):
+        return
+    if not np.isfinite(metric_value):
+        return
+    try:
+        mlflow.log_metric(key, metric_value, step=int(step))
+    except Exception:
+        pass
+
+
+def _mark_boosting_curves_live_streamed(model: Any, callbacks: Sequence[Any]) -> None:
+    if callbacks:
+        try:
+            setattr(model, '_pump_sentinel_mlflow_live_streamed', True)
+        except Exception:
+            pass
 
 
 def _positive_probabilities(model: Any, features: np.ndarray) -> np.ndarray:
@@ -611,6 +726,22 @@ def _dump_joblib(value: Any, path: Path) -> None:
     joblib.dump(value, path)
 
 
+def _start_mlflow_run_if_requested(config: SupervisedTrainingConfig) -> Any | None:
+    if not config.log_mlflow:
+        return None
+    try:
+        mlflow = import_module('mlflow')
+    except ImportError:
+        return None
+    try:
+        active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
+        if active_run is not None:
+            return nullcontext(active_run)
+        return mlflow.start_run()
+    except Exception:
+        return None
+
+
 def _log_supervised_training_run_safely(result: SupervisedTrainingResult, model: Any, config: SupervisedTrainingConfig) -> None:
     try:
         mlflow = import_module('mlflow')
@@ -618,33 +749,49 @@ def _log_supervised_training_run_safely(result: SupervisedTrainingResult, model:
     except ImportError:
         return
     try:
+        active_run = mlflow.active_run() if hasattr(mlflow, 'active_run') else None
+        if active_run is not None:
+            _log_supervised_training_run_to_active_run(mlflow, mlflow_sklearn, result, model, config)
+            return
         with mlflow.start_run():
-            scalar_params = {
-                name: value
-                for name, value in result.params.items()
-                if value is None or isinstance(value, bool | int | float | str)
-            }
-            if scalar_params:
-                mlflow.log_params({name: value for name, value in scalar_params.items() if value is not None})
-            numeric_metrics = {
-                name: float(value)
-                for name, value in result.metrics.items()
-                if not isinstance(value, bool) and isinstance(value, int | float) and np.isfinite(float(value))
-            }
-            if numeric_metrics:
-                mlflow.log_metrics(numeric_metrics)
-            _log_boosting_eval_curves(mlflow, model, config)
-            mlflow.log_artifacts(str(result.output_dir))
-            mlflow_sklearn.log_model(
-                model,
-                name=f'{config.model_type}_model',
-                registered_model_name=config.registered_model_name if config.register_model else None,
-            )
+            _log_supervised_training_run_to_active_run(mlflow, mlflow_sklearn, result, model, config)
     except Exception:
         return
 
 
+def _log_supervised_training_run_to_active_run(
+    mlflow: Any,
+    mlflow_sklearn: Any,
+    result: SupervisedTrainingResult,
+    model: Any,
+    config: SupervisedTrainingConfig,
+) -> None:
+    scalar_params = {
+        name: value
+        for name, value in result.params.items()
+        if value is None or isinstance(value, bool | int | float | str)
+    }
+    if scalar_params:
+        mlflow.log_params({name: value for name, value in scalar_params.items() if value is not None})
+    numeric_metrics = {
+        name: float(value)
+        for name, value in result.metrics.items()
+        if not isinstance(value, bool) and isinstance(value, int | float) and np.isfinite(float(value))
+    }
+    if numeric_metrics:
+        mlflow.log_metrics(numeric_metrics)
+    _log_boosting_eval_curves(mlflow, model, config)
+    mlflow.log_artifacts(str(result.output_dir))
+    mlflow_sklearn.log_model(
+        model,
+        name=f'{config.model_type}_model',
+        registered_model_name=config.registered_model_name if config.register_model else None,
+    )
+
+
 def _log_boosting_eval_curves(mlflow: Any, model: Any, config: SupervisedTrainingConfig) -> None:
+    if getattr(model, '_pump_sentinel_mlflow_live_streamed', False):
+        return
     evals_result = _evals_result(model)
     if not isinstance(evals_result, Mapping) or not evals_result:
         return
