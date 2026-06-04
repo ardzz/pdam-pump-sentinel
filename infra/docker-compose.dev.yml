@@ -86,7 +86,7 @@ services:
       ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
       TELEMETRY_CONNECTION: ${TELEMETRY_CONNECTION:-clickhouse}
       TELEMETRY_URL: ${TELEMETRY_URL:-http://default:@clickhouse:8123/default}
-      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
       HEALTH_HTTP_ENABLED: ${HEALTH_HTTP_ENABLED:-true}
       HEALTH_HTTP_HOST: 0.0.0.0
       HEALTH_HTTP_PORT: "8080"
