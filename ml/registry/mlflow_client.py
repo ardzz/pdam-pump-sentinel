@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 from collections.abc import Mapping
@@ -70,6 +71,92 @@ def log_pca_training_run(result: Any, detector: Any, config: Any) -> str | None:
         _set_model_alias_if_requested(mlflow, config, registered_model_name, model_info, run_id)
 
     return run_id
+
+
+def skab_window_dataframe(dataset: Any, *, normal_only: bool = False) -> Any | None:
+    try:
+        pandas = import_module('pandas')
+    except ImportError:
+        return None
+    features = getattr(dataset, 'features', None)
+    if features is None:
+        return None
+    labels = getattr(dataset, 'labels', None)
+    changepoints = getattr(dataset, 'changepoints', None)
+    if labels is None or changepoints is None:
+        return None
+    mask = None
+    if normal_only:
+        try:
+            mask = labels == 0
+        except Exception:
+            mask = None
+    selected_features = features[mask] if mask is not None else features
+    selected_labels = labels[mask] if mask is not None else labels
+    selected_changepoints = changepoints[mask] if mask is not None else changepoints
+    if len(selected_features) == 0:
+        return None
+    frame = pandas.DataFrame(
+        selected_features,
+        columns=[f'feature_{index}' for index in range(int(selected_features.shape[1]))],
+    )
+    frame['label'] = selected_labels.astype(int)
+    frame['changepoint'] = selected_changepoints.astype(int)
+    return frame
+
+
+def log_skab_inputs_to_active_run(
+    *,
+    train_df: Any,
+    val_df: Any | None,
+    test_df: Any | None,
+    manifest_path: Path | str | None,
+    manifest_dict: Mapping[str, Any] | None,
+    feature_mode: str,
+    split_strategy: str,
+) -> None:
+    try:
+        mlflow = import_module('mlflow')
+    except ImportError:
+        return
+    active_run = getattr(mlflow, 'active_run', None)
+    if callable(active_run):
+        try:
+            if active_run() is None:
+                return
+        except Exception:
+            return
+    try:
+        mlflow_data = getattr(mlflow, 'data', None) or import_module('mlflow.data')
+    except ImportError:
+        return
+
+    source_path = Path(manifest_path).resolve() if manifest_path is not None else None
+    tags = {
+        'dataset.manifest_sha256': _manifest_sha256(source_path, manifest_dict),
+        'dataset.feature_mode': str(feature_mode),
+        'dataset.split_strategy': str(split_strategy),
+    }
+    try:
+        mlflow.set_tags(tags)
+    except Exception:
+        pass
+
+    targets = 'label' if str(split_strategy).startswith('supervised') else None
+    split_frames = (('train', 'training', train_df), ('validation', 'validation', val_df), ('test', 'test', test_df))
+    for split_name, context, frame in split_frames:
+        if frame is None or len(frame) == 0:
+            continue
+        try:
+            dataset = mlflow_data.from_pandas(
+                frame,
+                source=_dataset_source_uri(source_path, split_name),
+                name=f'skab.{split_strategy}.{split_name}',
+                targets=targets if targets in frame.columns else None,
+            )
+            mlflow.log_input(dataset, context=context)
+        except Exception:
+            continue
 
 
 def load_champion_service(
@@ -377,10 +464,29 @@ def _numeric_metrics(values: Any) -> dict[str, float]:
     return metrics
 
 
+def _manifest_sha256(path: Path | None, manifest_dict: Mapping[str, Any] | None) -> str:
+    if path is not None and path.exists():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    if manifest_dict is None:
+        return hashlib.sha256(b'').hexdigest()
+    import json
+
+    payload = json.dumps(manifest_dict, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _dataset_source_uri(path: Path | None, split_name: str) -> str:
+    if path is None:
+        return f'skab://in-memory#{split_name}'
+    return f'{path.as_uri()}#{split_name}'
+
+
 __all__ = [
     'PcaAnomalyInferenceService',
     'load_champion_service',
+    'log_skab_inputs_to_active_run',
     'log_lstm_ae_training_run',
     'log_pca_training_run',
+    'skab_window_dataframe',
     'start_lstm_ae_training_run',
 ]

@@ -245,6 +245,7 @@ def _fit_and_write_artifacts_common(
         artifact_paths['metadata'],
         _metadata_payload(config, result, provenance_input_files, manifest, train_windows, validation_windows, test_windows),
     )
+    _log_skab_inputs_to_active_run(config, manifest, train_windows, validation_windows, test_windows)
     return result, model
 
 
@@ -558,6 +559,28 @@ def _unique_paths(paths: Sequence[Path]) -> list[Path]:
         seen.add(resolved)
         unique.append(path)
     return unique
+
+
+def _log_skab_inputs_to_active_run(
+    config: LstmAeTrainingConfig,
+    manifest: SkabSplitManifest | None,
+    train_windows: WindowedSensorDataset,
+    validation_windows: WindowedSensorDataset,
+    test_windows: WindowedSensorDataset | None,
+) -> None:
+    try:
+        from ml.registry.mlflow_client import log_skab_inputs_to_active_run, skab_window_dataframe
+    except Exception:
+        return
+    log_skab_inputs_to_active_run(
+        train_df=skab_window_dataframe(train_windows, normal_only=True),
+        val_df=skab_window_dataframe(validation_windows),
+        test_df=skab_window_dataframe(test_windows) if test_windows is not None else None,
+        manifest_path=config.split_manifest_path or config.input_path,
+        manifest_dict=manifest.to_payload() if manifest is not None else None,
+        feature_mode='raw',
+        split_strategy='unsupervised_novel_fault' if config.split_manifest_path is not None else 'single_csv',
+    )
 
 
 def _jsonable_config(config: LstmAeTrainingConfig) -> dict[str, Any]:
