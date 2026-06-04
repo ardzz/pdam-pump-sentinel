@@ -40,6 +40,8 @@ dependencies = [
     "aiomysql>=0.2.0",
     "paho-mqtt>=2.0.0",
     "python-dotenv>=1.0.0",
+    "lightgbm>=4.6.0",
+    "xgboost>=3.2.0",
 ]
 
 [project.optional-dependencies]
