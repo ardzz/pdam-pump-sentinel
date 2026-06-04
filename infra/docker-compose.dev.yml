@@ -30,28 +30,6 @@ services:
       retries: 5
       start_period: 5s
 
-  mysql:
-    image: mysql:8.0
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-    ports:
-      - "${DB_PORT:-3306}:3306"
-    environment:
-      TZ: ${TZ:-Asia/Jakarta}
-      MYSQL_DATABASE: ${DB_NAME:-pump_sentinel}
-      MYSQL_USER: ${DB_USER:-sentinel}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-change_me}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_change_me}
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
   clickhouse:
     image: clickhouse/clickhouse-server:24-alpine
     ports:
@@ -161,7 +139,6 @@ volumes:
   mosquitto-data:
   mosquitto-log:
   redis-data:
-  mysql-data:
   clickhouse-data:
   mlflow-data:
   app-venv:
