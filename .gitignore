@@ -27,6 +27,7 @@ infra/.env
 # ML artifacts
 mlruns/
 mlartifacts/
+mlflow.db
 *.h5
 *.keras
 *.pkl
