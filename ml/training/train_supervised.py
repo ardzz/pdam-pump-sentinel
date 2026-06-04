@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import xgboost.callback as _xgb_callback_module
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
@@ -447,9 +448,6 @@ def _fit_lightgbm(
     )
     _mark_boosting_curves_live_streamed(model, [mlflow_callback] if mlflow_callback is not None else [])
     return model
-
-
-import xgboost.callback as _xgb_callback_module
 
 
 class MlflowXGBCallback(_xgb_callback_module.TrainingCallback):
