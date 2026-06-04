@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
 import sys
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
+from importlib import import_module
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImports]  # noqa: E402
+
 from ml.training.train_pca import PcaTrainingConfig, train_pca_from_skab  # noqa: E402
+
+ACTIVE_MODEL_KEY = 'pumpad:active:model'
+DEFAULT_REGISTERED_MODEL_NAME = 'PumpAD'
+DEFAULT_ALIAS = 'champion'
 
 
 def main(argv: Sequence[str] | None = None) -> object:
@@ -41,12 +51,72 @@ def main(argv: Sequence[str] | None = None) -> object:
         scaler=args.scaler,
         log_mlflow=True,
         register_model=True,
-        registered_model_name='PumpAD',
-        alias='champion',
+        registered_model_name=DEFAULT_REGISTERED_MODEL_NAME,
+        alias=DEFAULT_ALIAS,
     )
     result = train_pca_from_skab(config)
+    _write_active_model(result, config)
     print(json.dumps(_result_payload(result), sort_keys=True))
     return result
+
+
+def _write_active_model(result: object, config: PcaTrainingConfig) -> None:
+    alias = config.alias or DEFAULT_ALIAS
+    mlflow_version = _resolve_mlflow_alias_version(config.registered_model_name, alias)
+    asyncio.run(_write_redis_json(ACTIVE_MODEL_KEY, _active_model_payload(result, config, alias, mlflow_version)))
+
+
+def _active_model_payload(
+    result: object,
+    config: PcaTrainingConfig,
+    alias: str,
+    mlflow_version: str | None,
+) -> dict[str, object]:
+    metrics = _jsonable(getattr(result, 'metrics', {}))
+    if not isinstance(metrics, dict):
+        metrics = {}
+    return {
+        'registered_model_name': config.registered_model_name,
+        'alias': alias,
+        'model_dir': str(getattr(result, 'output_dir', config.output_dir)),
+        'metrics': metrics,
+        'reason': 'initial champion seed',
+        'hot_swapped': False,
+        'mlflow_version': mlflow_version,
+        'name': config.registered_model_name,
+        'version': _active_model_version(mlflow_version, alias),
+        'activated_at': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _active_model_version(mlflow_version: str | None, alias: str) -> str:
+    return str(mlflow_version) if mlflow_version is not None else f'{alias} (local)'
+
+
+async def _write_redis_json(key: str, value: Mapping[str, object]) -> None:
+    try:
+        if redis_manager.is_enabled():
+            await redis_manager.set_json(key, _jsonable(value))
+    except Exception:
+        return
+
+
+def _resolve_mlflow_alias_version(model_name: str, alias: str) -> str | None:
+    try:
+        mlflow = import_module('mlflow')
+        mlflow_tracking = import_module('mlflow.tracking')
+    except ImportError:
+        return None
+
+    try:
+        tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+        version = mlflow_tracking.MlflowClient().get_model_version_by_alias(model_name, alias)
+        value = getattr(version, 'version', None)
+        return None if value is None else str(value)
+    except Exception:
+        return None
 
 
 def _parse_n_components(value: str) -> int | float | None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from routemq.job import Job  # type: ignore[reportMissingImports]
@@ -65,10 +66,23 @@ async def test_retraining_job_promotes_challenger(monkeypatch, tmp_path):
     assert config.registered_model_name == 'PumpAD'
     assert inference_calls == [(challenger_dir, None), sentinel]
     assert mlflow_calls == ['PumpAD']
-    assert fake_redis.values['pumpad:active:model']['model_dir'] == str(challenger_dir)
-    assert fake_redis.values['pumpad:active:model']['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
+    active_model = fake_redis.values['pumpad:active:model']
+    assert active_model['registered_model_name'] == 'PumpAD'
+    assert active_model['alias'] == 'champion'
+    assert active_model['model_dir'] == str(challenger_dir)
+    assert active_model['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
+    assert active_model['mlflow_version'] == '9'
+    assert active_model['name'] == 'PumpAD'
+    assert active_model['version'] == '9'
+    activated_at = datetime.fromisoformat(active_model['activated_at'])
+    assert activated_at.tzinfo is not None
+    assert activated_at.utcoffset() == timezone.utc.utcoffset(None)
     assert fake_redis.values['pumpad:retrain:result']['promoted'] is True
     assert fake_redis.values['pumpad:retrain:result']['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
+
+
+def test_active_model_version_uses_alias_label_without_mlflow_version():
+    assert retraining_job._active_model_version(None, 'champion') == 'champion (local)'
 
 
 async def test_retraining_job_rejects_challenger(monkeypatch, tmp_path):

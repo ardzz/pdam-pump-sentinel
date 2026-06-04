@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from importlib import import_module
 from types import SimpleNamespace
 
@@ -15,6 +16,19 @@ def _seed_initial_models():
 
 def _trigger_retrain():
     return import_module('scripts.trigger_retrain')
+
+
+class FakeRedisManager:
+    def __init__(self, enabled=True):
+        self.enabled = enabled
+        self.values = {}
+
+    def is_enabled(self):
+        return self.enabled
+
+    async def set_json(self, key, value, ex=None, px=None, nx=False, xx=False):
+        self.values[key] = value
+        return True
 
 
 def test_apply_drift_shifts_target_mean_and_preserves_frame_contract():
@@ -96,6 +110,7 @@ def test_trigger_retrain_dispatches_retraining_job(monkeypatch):
 def test_seed_initial_models_builds_champion_registration_config(monkeypatch, tmp_path):
     seed_initial_models = _seed_initial_models()
     calls = []
+    fake_redis = FakeRedisManager(enabled=True)
     input_path = tmp_path / 'train.csv'
     output_dir = tmp_path / 'artifacts'
     input_path.write_text('datetime;Pressure\n2024-01-01T00:00:00Z;1.0\n')
@@ -105,6 +120,8 @@ def test_seed_initial_models_builds_champion_registration_config(monkeypatch, tm
         return SimpleNamespace(output_dir=output_dir, metrics={'f1': 1.0})
 
     monkeypatch.setattr(seed_initial_models, 'train_pca_from_skab', train, raising=True)
+    monkeypatch.setattr(seed_initial_models, 'redis_manager', fake_redis, raising=True)
+    monkeypatch.setattr(seed_initial_models, '_resolve_mlflow_alias_version', lambda model_name, alias: '1', raising=True)
 
     result = seed_initial_models.main([
         '--input',
@@ -132,6 +149,19 @@ def test_seed_initial_models_builds_champion_registration_config(monkeypatch, tm
     assert config.register_model is True
     assert config.alias == 'champion'
     assert config.registered_model_name == 'PumpAD'
+    active_model = fake_redis.values['pumpad:active:model']
+    assert active_model['registered_model_name'] == 'PumpAD'
+    assert active_model['alias'] == 'champion'
+    assert active_model['model_dir'] == str(output_dir)
+    assert active_model['metrics'] == {'f1': 1.0}
+    assert active_model['reason'] == 'initial champion seed'
+    assert active_model['hot_swapped'] is False
+    assert active_model['mlflow_version'] == '1'
+    assert active_model['name'] == 'PumpAD'
+    assert active_model['version'] == '1'
+    activated_at = datetime.fromisoformat(active_model['activated_at'])
+    assert activated_at.tzinfo is not None
+    assert activated_at.utcoffset() == timezone.utc.utcoffset(None)
 
 
 @pytest.mark.parametrize(

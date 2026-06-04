@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 from importlib import import_module
 from numbers import Real
 from pathlib import Path
@@ -44,15 +45,15 @@ class RetrainingJob(Job):
             mlflow_version = _promote_mlflow_champion_alias(config.registered_model_name)
             await _write_redis_json(
                 ACTIVE_MODEL_KEY,
-                {
-                    'registered_model_name': config.registered_model_name,
-                    'alias': 'champion',
-                    'model_dir': str(output_dir),
-                    'metrics': metrics_payload,
-                    'reason': reason,
-                    'hot_swapped': hot_swapped,
-                    'mlflow_version': mlflow_version,
-                },
+                _active_model_payload(
+                    registered_model_name=config.registered_model_name,
+                    alias='champion',
+                    model_dir=output_dir,
+                    metrics=metrics_payload,
+                    reason=reason,
+                    hot_swapped=hot_swapped,
+                    mlflow_version=mlflow_version,
+                ),
             )
 
         logger.info('pumpad retraining completed: promoted=%s reason=%s', promoted, reason)
@@ -144,6 +145,34 @@ def _promote_mlflow_champion_alias(model_name: str = DEFAULT_REGISTERED_MODEL_NA
     except Exception:
         logger.warning('could not promote mlflow champion alias for %s', model_name, exc_info=True)
         return None
+
+
+def _active_model_payload(
+    *,
+    registered_model_name: str,
+    alias: str,
+    model_dir: Path,
+    metrics: Mapping[str, Any],
+    reason: str,
+    hot_swapped: bool,
+    mlflow_version: str | None,
+) -> dict[str, Any]:
+    return {
+        'registered_model_name': registered_model_name,
+        'alias': alias,
+        'model_dir': str(model_dir),
+        'metrics': metrics,
+        'reason': reason,
+        'hot_swapped': hot_swapped,
+        'mlflow_version': mlflow_version,
+        'name': registered_model_name,
+        'version': _active_model_version(mlflow_version, alias),
+        'activated_at': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _active_model_version(mlflow_version: str | None, alias: str) -> str:
+    return str(mlflow_version) if mlflow_version is not None else f'{alias} (local)'
 
 
 async def _write_redis_json(key: str, value: Mapping[str, Any]) -> None:
