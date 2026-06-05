@@ -1,6 +1,6 @@
 # Sprint — Remaining Tasks
 
-Status snapshot grounded in `git log` (HEAD `9e52b78`, in sync with `origin/main`) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
+Status snapshot grounded in `git log` (HEAD `bfa5ecf`, ahead of `origin/main` by 4 commits pending push) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
 
 ## Done (verified)
 
@@ -20,6 +20,11 @@ Status snapshot grounded in `git log` (HEAD `9e52b78`, in sync with `origin/main
   - `46bc0c3` — `get_inference_service()` falls back to MLflow `load_champion_service('PumpAD','champion')` when `PUMPAD_MODEL_DIR` is empty/invalid; `MLFLOW_TRACKING_URI=http://mlflow:5000` set on app service in dev compose. Partial mitigation for the §5 "alias polling" gap — cold start is now wired; runtime polling still TODO.
   - `8788e83` — Persistence writes anomaly observation as a single ClickHouse row `measurement='anomaly_score'`, `value_float=score`, `value_int=flag`. Dashboard live-sensors + anomaly-history charts now actually render.
   - `dd38b06` — Retraining job + seed script write `name` / `version` / `activated_at` (additive) on `pumpad:active:model` Redis key. Dashboard Model Registry page no longer shows N/A.
+- **Smoke L1 verification — end-to-end pipeline confirmed live** (host bootstrap.app, fresh docker stack, replay → controller → PCA inference → MQTT publish → Redis + ClickHouse). Evidence captured: `pumpad:latest:anomaly:ipa_01` carrying real PCA T²/Q with `model_version="1"`; 3× `anomaly_score` rows in `telemetry_observations`; `pumpad:active:model` populated with dashboard-aligned fields. P0-A `load_champion_service` fallback exercised live — app downloaded artifacts on first message. Fixes landed during smoke:
+  - `f4d994c` — Aligned docker MLflow image to `v3.12.0` (matching host 3.12 client) and enabled `--serve-artifacts` + `--artifacts-destination` + `--default-artifact-root mlflow-artifacts:/` so external clients can upload artifacts via HTTP proxy instead of the container-local filesystem path that triggered `PermissionError: '/mlflow'`.
+  - `fce3fad` — `scripts/seed_initial_models.py` now calls `redis_manager.initialize()` + `disconnect()` around its standalone Redis write (the previous swallowed exception left `pumpad:active:model` empty on fresh seeds). `FakeRedisManager` test stub updated to track the new lifecycle calls.
+  - `6f4123a` — `make replay` no longer crashes for missing `--input`; new `REPLAY_INPUT` / `REPLAY_STATION` / `REPLAY_HOST` / `REPLAY_PORT` / `REPLAY_LIMIT` / `REPLAY_EXTRA_ARGS` Make variables, default fixture `tests/fixtures/skab_tiny.csv`.
+  - `bfa5ecf` — `infra/.env.example` documents the host port remap variables (`MQTT_PORT`, `CLICKHOUSE_*`, `APP_METRICS_PORT`, `PROMETHEUS_PORT`, `GRAFANA_PORT`, `MLFLOW_PORT`) so `infra/.env` overrides are reproducible across workstations.
 
 ## Remaining
 
