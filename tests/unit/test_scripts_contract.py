@@ -22,9 +22,18 @@ class FakeRedisManager:
     def __init__(self, enabled=True):
         self.enabled = enabled
         self.values = {}
+        self.initialize_calls = 0
+        self.disconnect_calls = 0
 
     def is_enabled(self):
         return self.enabled
+
+    async def initialize(self):
+        self.initialize_calls += 1
+        return self.enabled
+
+    async def disconnect(self):
+        self.disconnect_calls += 1
 
     async def set_json(self, key, value, ex=None, px=None, nx=False, xx=False):
         self.values[key] = value

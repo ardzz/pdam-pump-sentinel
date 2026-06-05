@@ -94,11 +94,18 @@ def _active_model_version(mlflow_version: str | None, alias: str) -> str:
 
 
 async def _write_redis_json(key: str, value: Mapping[str, object]) -> None:
+    if not redis_manager.is_enabled():
+        return
     try:
-        if redis_manager.is_enabled():
-            await redis_manager.set_json(key, _jsonable(value))
+        await redis_manager.initialize()
+        await redis_manager.set_json(key, _jsonable(value))
     except Exception:
         return
+    finally:
+        try:
+            await redis_manager.disconnect()
+        except Exception:
+            pass
 
 
 def _resolve_mlflow_alias_version(model_name: str, alias: str) -> str | None:
