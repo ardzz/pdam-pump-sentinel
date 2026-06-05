@@ -20,6 +20,12 @@ PCA_SPLIT_ARGS ?= $(PCA_SPLIT_OUTPUT_DIR) --split-manifest $(PCA_SPLIT_MANIFEST)
 MLFLOW_REPORT_PORT ?= 5050
 MLFLOW_REPORT_BACKEND ?= sqlite:///data/mlflow_live.db
 MLFLOW_REPORT_ARTIFACTS ?= $(CURDIR)/data/mlflow_server_artifacts
+REPLAY_INPUT ?= tests/fixtures/skab_tiny.csv
+REPLAY_STATION ?= ipa_01
+REPLAY_HOST ?= localhost
+REPLAY_PORT ?= 1883
+REPLAY_LIMIT ?=
+REPLAY_EXTRA_ARGS ?=
 
 help:
 	@echo "PDAM Pump Sentinel - available targets:"
@@ -59,7 +65,7 @@ queue-work:
 	uv run routemq queue-work --queue default
 
 replay:
-	uv run python scripts/replay_skab.py
+	uv run python scripts/replay_skab.py --input $(REPLAY_INPUT) --station $(REPLAY_STATION) --host $(REPLAY_HOST) --port $(REPLAY_PORT) $(if $(REPLAY_LIMIT),--limit $(REPLAY_LIMIT),) $(REPLAY_EXTRA_ARGS)
 
 inject-drift:
 	uv run python scripts/inject_drift.py
