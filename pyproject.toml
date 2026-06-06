@@ -42,6 +42,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "lightgbm>=4.6.0",
     "xgboost>=3.2.0",
+    "streamlit-autorefresh>=1.0.1",
 ]
 
 [project.optional-dependencies]
