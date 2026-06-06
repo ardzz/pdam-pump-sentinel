@@ -16,6 +16,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImports]  # noqa: E402
 
+from app.observability.annotations import post_annotation  # noqa: E402
+from app.observability.metrics import set_model_info  # noqa: E402
 from ml.training.train_pca import PcaTrainingConfig, train_pca_from_skab  # noqa: E402
 
 ACTIVE_MODEL_KEY = 'pumpad:active:model'
@@ -63,7 +65,13 @@ def main(argv: Sequence[str] | None = None) -> object:
 def _write_active_model(result: object, config: PcaTrainingConfig) -> None:
     alias = config.alias or DEFAULT_ALIAS
     mlflow_version = _resolve_mlflow_alias_version(config.registered_model_name, alias)
-    asyncio.run(_write_redis_json(ACTIVE_MODEL_KEY, _active_model_payload(result, config, alias, mlflow_version)))
+    payload = _active_model_payload(result, config, alias, mlflow_version)
+    asyncio.run(_write_redis_json(ACTIVE_MODEL_KEY, payload))
+    set_model_info(payload)
+    post_annotation(
+        text=f'Initial champion v{payload.get("version", mlflow_version)} seeded',
+        tags=['model-promotion', 'champion'],
+    )
 
 
 def _active_model_payload(

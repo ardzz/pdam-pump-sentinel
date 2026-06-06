@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
+from app.observability.metrics import set_model_info
 from ml.inference.loader import load_inference_service_from_artifacts
 
 MODEL_DIR_ENV = 'PUMPAD_MODEL_DIR'
@@ -24,6 +25,8 @@ _loaded = False
 def get_inference_service() -> InferenceService | None:
     global _service, _loaded
     if _loaded:
+        if _service is not None:
+            _set_service_model_info(_service, os.getenv(MODEL_DIR_ENV, ''))
         return _service
 
     _loaded = True
@@ -41,6 +44,8 @@ def get_inference_service() -> InferenceService | None:
         except Exception as exc:
             logger.warning('MLflow champion inference service load failed: %s', exc, exc_info=False)
             return None
+    if _service is not None:
+        _set_service_model_info(_service, model_dir or _service_model_dir(_service))
     return _service
 
 
@@ -58,3 +63,27 @@ def reset_inference_service() -> None:
 
 def _looks_like_model_dir(model_dir: Path) -> bool:
     return any((model_dir / name).exists() for name in ('metadata.json', 'pca_detector.joblib', 'lstm_ae.keras'))
+
+
+def _set_service_model_info(service: InferenceService, model_dir: str) -> None:
+    metadata = getattr(service, 'metadata', {})
+    if not isinstance(metadata, Mapping):
+        metadata = {}
+    set_model_info(
+        {
+            'name': _metadata_value(metadata, 'name') or _metadata_value(metadata, 'registered_model_name') or 'PumpAD',
+            'version': getattr(service, 'model_version', '') or _metadata_value(metadata, 'version'),
+            'alias': _metadata_value(metadata, 'alias') or 'champion',
+            'model_dir': model_dir or _service_model_dir(service),
+            'run_id': getattr(service, 'run_id', '') or _metadata_value(metadata, 'run_id'),
+        }
+    )
+
+
+def _service_model_dir(service: InferenceService) -> str:
+    value = getattr(service, 'model_dir', '') or getattr(service, 'artifact_dir', '')
+    return '' if value is None else str(value)
+
+
+def _metadata_value(metadata: Mapping[str, Any], key: str) -> Any:
+    return metadata.get(key)

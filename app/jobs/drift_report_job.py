@@ -11,6 +11,8 @@ from routemq.queue import dispatch  # type: ignore[reportMissingImports]
 from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImports]
 
 from app.jobs.retraining_job import RetrainingJob
+from app.observability.annotations import post_annotation
+from app.observability.metrics import DRIFT_DETECTED, DRIFT_SHARE
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.monitoring.drift_check import DriftResult, check_drift
 
@@ -32,6 +34,13 @@ class DriftReportJob(Job):
             drift_share=float(os.getenv('DRIFT_SHARE_THRESHOLD', '0.5')),
         )
         payload = _drift_payload(result)
+        DRIFT_SHARE.set(float(result.drift_share))
+        DRIFT_DETECTED.set(1.0 if result.dataset_drift else 0.0)
+        if result.dataset_drift:
+            post_annotation(
+                text=f'Drift detected (share={result.drift_share:.3f}, n_drifted={result.n_drifted})',
+                tags=['drift'],
+            )
 
         logger.info(
             'pumpad drift report completed: dataset_drift=%s drift_share=%s',
