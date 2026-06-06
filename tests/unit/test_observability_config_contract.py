@@ -24,11 +24,15 @@ def test_prometheus_scrapes_routemq_app_metrics_endpoint():
 
 def test_grafana_dashboard_loads_and_uses_routemq_metrics():
     dashboard = json.loads((ROOT / 'infra/grafana/dashboards/pumpad.json').read_text(encoding='utf-8'))
-    expressions = [target['expr'] for panel in dashboard['panels'] for target in panel['targets']]
+    expressions = [
+        target['expr']
+        for panel in dashboard['panels']
+        for target in panel.get('targets', [])
+    ]
 
     assert dashboard['uid'] == 'pumpad-observability'
-    assert any('routemq_mqtt_messages_received_total_total' in expression for expression in expressions)
-    assert any('routemq_telemetry_points_accepted_total_total' in expression for expression in expressions)
+    assert any('routemq_mqtt_messages_received_total' in expression for expression in expressions)
+    assert any('routemq_telemetry_points_accepted_total' in expression for expression in expressions)
     assert any('routemq_telemetry_queue_depth' in expression for expression in expressions)
 
 

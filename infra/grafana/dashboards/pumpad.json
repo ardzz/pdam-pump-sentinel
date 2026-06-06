@@ -14,15 +14,36 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "MQTT ingress throughput by lifecycle state. Failed should stay close to zero while received and succeeded track together.",
       "fieldConfig": {
         "defaults": {
+          "custom": {
+            "axisLabel": "messages/s"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          },
           "unit": "msgps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 0
       },
@@ -33,28 +54,40 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
         {
-          "expr": "sum(rate(routemq_mqtt_messages_received_total_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(routemq_mqtt_messages_received_total[5m]))",
           "legendFormat": "received",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(routemq_mqtt_messages_succeeded_total_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(routemq_mqtt_messages_succeeded_total[5m]))",
           "legendFormat": "succeeded",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(routemq_mqtt_messages_failed_total_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(routemq_mqtt_messages_failed_total[5m]))",
           "legendFormat": "failed",
           "refId": "C"
         }
       ],
-      "title": "MQTT message lifecycle",
+      "title": "MQTT lifecycle",
       "type": "timeseries"
     },
     {
@@ -62,16 +95,37 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Telemetry point flow through the RouteMQ runtime. Dropped should remain near zero; accepted is the main inference traffic proxy.",
       "fieldConfig": {
         "defaults": {
+          "custom": {
+            "axisLabel": "points/s"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
           "unit": "ops"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 6,
         "y": 0
       },
       "id": 2,
@@ -81,28 +135,40 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
         {
-          "expr": "sum(rate(routemq_telemetry_points_accepted_total_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(routemq_telemetry_points_accepted_total[5m]))",
           "legendFormat": "accepted",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(routemq_telemetry_points_flushed_total_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(routemq_telemetry_points_flushed_total[5m]))",
           "legendFormat": "flushed",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(routemq_telemetry_points_dropped_total_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(routemq_telemetry_points_dropped_total[5m]))",
           "legendFormat": "dropped",
           "refId": "C"
         }
       ],
-      "title": "Telemetry point lifecycle",
+      "title": "Telemetry lifecycle",
       "type": "timeseries"
     },
     {
@@ -110,25 +176,42 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Share of MQTT messages that failed during RouteMQ dispatch over the last 5 minutes.",
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 12,
         "y": 0
       },
-      "id": 3,
+      "id": 4,
       "options": {
-        "colorMode": "value",
-        "graphViz": {
-          "show": true
-        },
-        "justifyMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -141,12 +224,297 @@
       },
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(rate(routemq_mqtt_messages_failed_total[5m])) / clamp_min(sum(rate(routemq_mqtt_messages_received_total[5m])), 0.001)",
+          "legendFormat": "failed share",
+          "refId": "A"
+        }
+      ],
+      "title": "MQTT failure rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Share of telemetry points dropped before adapter writes. Any sustained non-zero value means ingress is outpacing processing.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(rate(routemq_telemetry_points_dropped_total[5m])) / clamp_min(sum(rate(routemq_telemetry_points_accepted_total[5m])) + sum(rate(routemq_telemetry_points_dropped_total[5m])), 0.001)",
+          "legendFormat": "drop share",
+          "refId": "A"
+        }
+      ],
+      "title": "Telemetry drop rate",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "description": "Health section divider for runtime backlog and scrape status.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 8,
+      "panels": [],
+      "title": "Health",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Accepted telemetry points per second, used as the closest Prometheus proxy for inference throughput.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "points/s"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 9
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(routemq_telemetry_points_accepted_total[5m]))",
+          "legendFormat": "accepted telemetry",
+          "refId": "A"
+        }
+      ],
+      "title": "Inference throughput proxy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Current telemetry adapter queue depth. Sustained growth means workers or storage writes are lagging behind ingress.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 9
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "sum(routemq_telemetry_queue_depth)",
-          "legendFormat": "queue depth",
+          "legendFormat": "queued points",
           "refId": "A"
         }
       ],
       "title": "Telemetry queue depth",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Prometheus scrape status for the RouteMQ app metrics endpoint. Green means the app is reachable and exposing metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 9
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{job=\"routemq-app\"}",
+          "legendFormat": "RouteMQ app",
+          "refId": "A"
+        }
+      ],
+      "title": "RouteMQ service up",
       "type": "stat"
     }
   ],
@@ -154,7 +522,8 @@
   "schemaVersion": 39,
   "tags": [
     "pdam-pump-sentinel",
-    "routemq"
+    "routemq",
+    "observability"
   ],
   "templating": {
     "list": []
