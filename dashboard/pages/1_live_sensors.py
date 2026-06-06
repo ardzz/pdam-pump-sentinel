@@ -1,8 +1,11 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 from dashboard import data
+
+st_autorefresh(interval=5 * 1000, key='live-sensors-refresh')
 
 st.title('Live Sensor Monitoring')
 
@@ -18,15 +21,23 @@ col1, col2, col3, col4 = st.columns(4)
 reading = data.get_latest_reading(station)
 anomaly = data.get_latest_anomaly(station)
 
+if anomaly:
+    if anomaly.get('anomaly', 0) == 1:
+        st.error(f"ANOMALY DETECTED. Top contributing sensor: {anomaly.get('top_contributing_sensor', 'N/A')}.")
+    else:
+        st.success('NORMAL. Latest anomaly detector output is stable.')
+else:
+    st.info('No anomaly data available yet.')
+
 if reading:
     with col1:
-        st.metric('Current (A)', reading.get('Current', 0))
+        st.metric('Current (A)', reading.get('Current', 0), delta_color='off')
     with col2:
-        st.metric('Voltage (V)', reading.get('Voltage', 0))
+        st.metric('Voltage (V)', reading.get('Voltage', 0), delta_color='off')
     with col3:
-        st.metric('Pressure (bar)', reading.get('Pressure', 0))
+        st.metric('Pressure (bar)', reading.get('Pressure', 0), delta_color='off')
     with col4:
-        st.metric('Temperature (°C)', reading.get('Temperature', 0))
+        st.metric('Temperature (°C)', reading.get('Temperature', 0), delta_color='off')
 else:
     st.info('Waiting for sensor data...')
 
@@ -35,15 +46,16 @@ st.divider()
 if anomaly:
     status_color = 'red' if anomaly.get('anomaly', 0) == 1 else 'green'
     status_text = 'ANOMALY DETECTED' if anomaly.get('anomaly', 0) == 1 else 'NORMAL'
+    score_value = round(anomaly.get('score', 0) or 0, 4)
 
     st.subheader('Anomaly Status')
     st.markdown(f'### :{status_color}[{status_text}]')
 
     ac1, ac2 = st.columns(2)
     with ac1:
-        st.metric('Anomaly Score', round(anomaly.get('score', 0), 4))
+        st.metric('Anomaly Score', score_value, delta=score_value, delta_color='inverse')
     with ac2:
-        st.metric('Model Version', anomaly.get('model_version', 'N/A'))
+        st.metric('Model Version', anomaly.get('model_version', 'N/A'), delta_color='off')
 else:
     st.info('No anomaly data available yet.')
 
@@ -55,9 +67,13 @@ if history:
 
     score_data = df_hist[df_hist['measurement'] == 'anomaly_score']
     if not score_data.empty:
-        fig = px.line(score_data, x='observed_at', y='value_float',
-                     title='Anomaly Score (Last 50)',
-                     labels={'value_float': 'Score', 'observed_at': 'Time'})
+        fig = px.line(
+            score_data,
+            x='observed_at',
+            y='value_float',
+            title='Anomaly Score (Last 50)',
+            labels={'value_float': 'Score', 'observed_at': 'Time'},
+        )
         fig.update_layout(height=300, margin=dict(l=0, r=0, t=30, b=0))
         st.plotly_chart(fig, use_container_width=True)
     else:
