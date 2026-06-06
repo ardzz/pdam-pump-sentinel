@@ -38,7 +38,7 @@ from routemq.telemetry import telemetry  # type: ignore[reportMissingImports]
 from routemq.tsdb.telemetry_adapters import adapter_from_settings  # type: ignore[reportMissingImports]
 from routemq.worker_manager import WorkerManager  # type: ignore[reportMissingImports]
 
-from ml.monitoring.scheduler import RetrainScheduler
+from ml.monitoring.scheduler import DriftScheduler, RetrainScheduler
 
 
 class Application:
@@ -62,6 +62,7 @@ class Application:
         self.worker_manager = WorkerManager(self.router, router_directory='app.routers')
         self._telemetry_started = False
         self._retrain_scheduler = RetrainScheduler()
+        self._drift_scheduler = DriftScheduler()
         self.health_status = HealthStatus()
         self.health_server: HealthServer | None = None
         self.metrics_health_server: HealthServer | None = None
@@ -185,6 +186,8 @@ class Application:
             self.loop.run_until_complete(self._initialize_connections())
             if os.getenv('ENABLE_RETRAIN_SCHEDULER', 'false').lower() == 'true':
                 self._retrain_scheduler.start(self.loop)
+            if os.getenv('ENABLE_DRIFT_SCHEDULER', 'false').lower() == 'true':
+                self._drift_scheduler.start(self.loop)
             self.health_status.startup_complete = True
             self.logger.info('Application started. Press Ctrl+C to exit.')
             self.loop.run_forever()
@@ -194,6 +197,7 @@ class Application:
             self.health_status.shutting_down = True
             self.worker_manager.stop_workers()
             self._retrain_scheduler.shutdown()
+            self._drift_scheduler.shutdown()
             self.loop.run_until_complete(self._cleanup_connections())
             self._stop_health_servers()
             client.loop_stop()
