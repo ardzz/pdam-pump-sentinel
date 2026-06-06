@@ -1,44 +1,149 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 0,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "limit": 100,
+        "name": "Retraining events",
+        "tags": [
+          "retraining",
+          "model"
+        ],
+        "tagsField": "tags",
+        "type": "tags"
+      },
+      {
+        "builtIn": 0,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 152, 48, 1)",
+        "limit": 100,
+        "name": "Drift events",
+        "tags": [
+          "drift"
+        ],
+        "tagsField": "tags",
+        "type": "tags"
+      },
+      {
+        "builtIn": 0,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(50, 200, 50, 1)",
+        "limit": 100,
+        "name": "Model promotion events",
+        "tags": [
+          "model-promotion"
+        ],
+        "tagsField": "tags",
+        "type": "tags"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "RouteMQ Observability",
+      "type": "link",
+      "url": "/d/pumpad-observability"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "System Health",
+      "type": "link",
+      "url": "/d/pumpad-system-health"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
-      "description": "Model metadata is not exported to Prometheus in this deployment; use telemetry ingress as the live traffic proxy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Current champion labels exported by the inference runtime.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
       "gridPos": {
-        "h": 5,
+        "h": 6,
         "w": 8,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
-        "content": "### Active champion\nPrometheus exposes RouteMQ traffic, not model registry metadata.\n\nTraffic proxy: `sum(rate(routemq_telemetry_points_accepted_total[5m]))`.\n\nNote: see Streamlit Model Registry for live `model.version`.",
-        "mode": "markdown"
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count by (name, version, alias) (pumpad_model_info)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{name}} {{version}} {{alias}}",
+          "refId": "A"
+        }
+      ],
       "title": "Active champion metadata",
-      "type": "text"
+      "type": "table"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Proxy for inference/anomaly evaluation throughput. The true anomaly_score is stored in ClickHouse, so this panel only shows accepted telemetry rate.",
+      "description": "Current share of observations counted as drift.",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
+          "max": 1,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
@@ -46,22 +151,160 @@
                 "value": 0.1
               },
               {
-                "color": "green",
-                "value": 1
+                "color": "red",
+                "value": 0.3
               }
             ]
           },
-          "unit": "ops"
+          "unit": "percentunit"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
-        "w": 8,
+        "h": 6,
+        "w": 4,
         "x": 8,
         "y": 0
       },
       "id": 2,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(pumpad_drift_share)",
+          "legendFormat": "drift share",
+          "refId": "A"
+        }
+      ],
+      "title": "Drift share",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Binary drift detector state from the monitoring loop.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "text": "STABLE"
+                },
+                "1": {
+                  "color": "red",
+                  "text": "DRIFT"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(pumpad_drift_detected)",
+          "legendFormat": "drift detected",
+          "refId": "A"
+        }
+      ],
+      "title": "Drift state",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Seconds since the newest telemetry observation per selected station.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 180
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 4,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -82,12 +325,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_telemetry_points_accepted_total[5m]))",
-          "legendFormat": "accepted telemetry",
+          "expr": "pumpad_telemetry_freshness_seconds{station=~\"$station\"}",
+          "legendFormat": "{{station}}",
           "refId": "A"
         }
       ],
-      "title": "Anomaly rate proxy",
+      "title": "Telemetry freshness",
       "type": "stat"
     },
     {
@@ -95,75 +338,10 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Total MQTT messages received in the last hour. Use this as the operator traffic volume headline.",
+      "description": "Current anomaly-score average estimated from histogram sum/count.",
       "fieldConfig": {
         "defaults": {
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "green",
-                "value": 10
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 0
-      },
-      "id": 3,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(routemq_mqtt_messages_received_total[1h]))",
-          "legendFormat": "received",
-          "refId": "A"
-        }
-      ],
-      "title": "MQTT messages last 1h",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Failed MQTT messages in the last hour. This should be zero during a clean demo run.",
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
+          "decimals": 3,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -173,11 +351,11 @@
               },
               {
                 "color": "yellow",
-                "value": 1
+                "value": 0.5
               },
               {
                 "color": "red",
-                "value": 10
+                "value": 0.8
               }
             ]
           },
@@ -186,15 +364,15 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 6,
         "w": 4,
         "x": 20,
         "y": 0
       },
-      "id": 4,
+      "id": 5,
       "options": {
         "colorMode": "background",
-        "graphMode": "none",
+        "graphMode": "area",
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
@@ -212,12 +390,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(routemq_mqtt_messages_failed_total[1h]))",
-          "legendFormat": "failed",
+          "expr": "sum(rate(pumpad_anomaly_score_sum{station=~\"$station\"}[5m])) / clamp_min(sum(rate(pumpad_anomaly_score_count{station=~\"$station\"}[5m])), 0.001)",
+          "legendFormat": "avg score",
           "refId": "A"
         }
       ],
-      "title": "Failed messages last 1h",
+      "title": "Current anomaly score avg",
       "type": "stat"
     },
     {
@@ -225,13 +403,12 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Dropped telemetry divided by accepted telemetry. Spikes indicate queue pressure or downstream write problems.",
+      "description": "p50 inference latency by model version.",
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "axisLabel": "drop ratio"
+            "axisLabel": "seconds"
           },
-          "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -241,33 +418,33 @@
               },
               {
                 "color": "yellow",
-                "value": 0.005
+                "value": 0.5
               },
               {
                 "color": "red",
-                "value": 0.02
+                "value": 1
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "s"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 5
+        "y": 6
       },
-      "id": 5,
+      "id": 6,
       "options": {
         "legend": {
           "displayMode": "list",
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
@@ -276,12 +453,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_telemetry_points_dropped_total[5m])) / sum(rate(routemq_telemetry_points_accepted_total[5m]))",
-          "legendFormat": "dropped / accepted",
+          "expr": "histogram_quantile(0.50, sum by (le, model_version) (rate(pumpad_inference_latency_seconds_bucket{station=~\"$station\"}[5m])))",
+          "legendFormat": "{{model_version}} p50",
           "refId": "A"
         }
       ],
-      "title": "Telemetry drop ratio over time",
+      "title": "Inference latency p50",
       "type": "timeseries"
     },
     {
@@ -289,11 +466,11 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Telemetry queue backlog over the dashboard's one-hour window. A rising line means ingestion is faster than downstream flushes.",
+      "description": "p95 inference latency by model version.",
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "axisLabel": "queued points"
+            "axisLabel": "seconds"
           },
           "thresholds": {
             "mode": "absolute",
@@ -304,11 +481,203 @@
               },
               {
                 "color": "yellow",
-                "value": 100
+                "value": 1
               },
               {
                 "color": "red",
-                "value": 500
+                "value": 2
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 6
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, model_version) (rate(pumpad_inference_latency_seconds_bucket{station=~\"$station\"}[5m])))",
+          "legendFormat": "{{model_version}} p95",
+          "refId": "A"
+        }
+      ],
+      "title": "Inference latency p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "p99 inference latency by model version.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "seconds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 4
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le, model_version) (rate(pumpad_inference_latency_seconds_bucket{station=~\"$station\"}[5m])))",
+          "legendFormat": "{{model_version}} p99",
+          "refId": "A"
+        }
+      ],
+      "title": "Inference latency p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Prometheus histogram buckets for anomaly-score distribution.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "id": 9,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Turbo",
+          "steps": 64
+        },
+        "legend": {
+          "show": true
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (le) (rate(pumpad_anomaly_score_bucket{station=~\"$station\"}[5m]))",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Anomaly score distribution",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Raw anomaly_score observations persisted in ClickHouse.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "score"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 0.8
               }
             ]
           },
@@ -320,9 +689,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 14
       },
-      "id": 6,
+      "id": 10,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -336,15 +705,122 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
           },
-          "expr": "sum(routemq_telemetry_queue_depth)",
-          "legendFormat": "queued points",
+          "query": "SELECT observed_at AS time, value_float AS score FROM default.telemetry_observations WHERE measurement = 'anomaly_score' AND $__timeFilter(observed_at) ORDER BY observed_at ASC",
+          "queryType": "sql",
+          "rawSql": "SELECT observed_at AS time, value_float AS score FROM default.telemetry_observations WHERE measurement = 'anomaly_score' AND $__timeFilter(observed_at) ORDER BY observed_at ASC",
           "refId": "A"
         }
       ],
-      "title": "Telemetry queue depth",
+      "title": "ClickHouse raw anomaly score",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Retraining outcomes over time by result.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "jobs",
+            "fillOpacity": 60,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/promoted/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/rejected/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/error/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (result) (increase(pumpad_retraining_jobs_total[1h]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Retraining jobs by result",
       "type": "timeseries"
     }
   ],
@@ -355,7 +831,26 @@
     "mlops"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT device_id FROM default.telemetry_observations LIMIT 10",
+        "includeAll": true,
+        "name": "station",
+        "options": [],
+        "query": "SELECT DISTINCT device_id FROM default.telemetry_observations LIMIT 10",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",

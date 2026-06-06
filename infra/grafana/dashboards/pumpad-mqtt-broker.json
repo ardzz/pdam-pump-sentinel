@@ -65,44 +65,19 @@
       "includeVars": true,
       "keepTime": true,
       "targetBlank": false,
-      "title": "MLOps Loop",
+      "title": "System Health",
       "type": "link",
-      "url": "/d/pumpad-mlops"
-    },
-    {
-      "icon": "external link",
-      "includeVars": true,
-      "keepTime": true,
-      "targetBlank": false,
-      "title": "MQTT Broker",
-      "type": "link",
-      "url": "/d/pumpad-mqtt-broker"
+      "url": "/d/pumpad-system-health"
     }
   ],
   "liveNow": false,
   "panels": [
     {
-      "description": "Operator entry points and first-response checks for the demo stack.",
-      "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "content": "### Critical service URLs\n- RouteMQ metrics: `http://app:8080/metrics` inside Docker; Prometheus host UI: `http://localhost:19090`\n- Grafana: `http://localhost:3000`\n- Streamlit operator dashboard / Model Registry: `http://localhost:8501`\n- MQTT broker: `mqtt://localhost:1883`\n- ClickHouse data inspection: `http://localhost:8123/play`\n\nRunbook hints: if RouteMQ is down, check the app container, `/metrics` endpoint, and Prometheus Targets page before reloading Grafana dashboards.",
-        "mode": "markdown"
-      },
-      "title": "Operator runbook",
-      "type": "text"
-    },
-    {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Direct Prometheus target status for the RouteMQ application. 1 is reachable; 0 means Prometheus cannot scrape the metrics endpoint.",
+      "description": "Prometheus scrape health for the Mosquitto exporter.",
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -138,12 +113,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 6,
         "x": 0,
-        "y": 4
+        "y": 0
       },
-      "id": 2,
+      "id": 1,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -164,12 +139,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{job=\"routemq-app\"}",
-          "legendFormat": "RouteMQ app",
+          "expr": "up{job=\"mosquitto-exporter\"}",
+          "legendFormat": "mosquitto exporter",
           "refId": "A"
         }
       ],
-      "title": "RouteMQ app up",
+      "title": "Exporter health",
       "type": "stat"
     },
     {
@@ -177,24 +152,10 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Scrape success across all RouteMQ app targets. This should remain 1 during the demo.",
+      "description": "Currently connected MQTT clients.",
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "text": "FAILED"
-                },
-                "1": {
-                  "color": "green",
-                  "text": "OK"
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -203,8 +164,12 @@
                 "value": null
               },
               {
-                "color": "green",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
               }
             ]
           },
@@ -213,14 +178,75 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 6,
         "x": 6,
-        "y": 4
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(mosquitto_clients_connected{job=\"mosquitto-exporter\"})",
+          "legendFormat": "connected",
+          "refId": "A"
+        }
+      ],
+      "title": "Connected clients",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Retained messages currently held by the broker.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 0
       },
       "id": 3,
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
@@ -239,12 +265,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "min(up{job=\"routemq-app\"})",
-          "legendFormat": "scrape success",
+          "expr": "sum(mosquitto_retained_messages_total{job=\"mosquitto-exporter\"})",
+          "legendFormat": "retained",
           "refId": "A"
         }
       ],
-      "title": "Scrape success",
+      "title": "Retained messages",
       "type": "stat"
     },
     {
@@ -252,9 +278,10 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Wall-clock time of the latest successful RouteMQ scrape sample, displayed as an operator-friendly timestamp.",
+      "description": "Active broker subscriptions.",
       "fieldConfig": {
         "defaults": {
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -264,15 +291,15 @@
               }
             ]
           },
-          "unit": "dateTimeAsIso"
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 6,
-        "x": 12,
-        "y": 4
+        "x": 18,
+        "y": 0
       },
       "id": 4,
       "options": {
@@ -295,12 +322,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "timestamp(up{job=\"routemq-app\"} == 1) * 1000",
-          "legendFormat": "last successful scrape",
+          "expr": "sum(mosquitto_subscriptions_total{job=\"mosquitto-exporter\"})",
+          "legendFormat": "subscriptions",
           "refId": "A"
         }
       ],
-      "title": "Last successful scrape",
+      "title": "Subscriptions",
       "type": "stat"
     },
     {
@@ -308,176 +335,32 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Seconds since the latest RouteMQ scrape sample. Rising above the scrape interval points to target or network trouble.",
+      "description": "Inbound and outbound broker message rates.",
       "fieldConfig": {
         "defaults": {
-          "decimals": 0,
+          "custom": {
+            "axisLabel": "messages/s"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 60
-              },
-              {
-                "color": "red",
-                "value": 120
               }
             ]
           },
-          "unit": "s"
+          "unit": "msgps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 4
+        "w": 8,
+        "x": 0,
+        "y": 6
       },
       "id": 5,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "time() - timestamp(up{job=\"routemq-app\"})",
-          "legendFormat": "scrape age",
-          "refId": "A"
-        }
-      ],
-      "title": "Scrape age",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Single health headline across every Prometheus scrape target.",
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "text": "DEGRADED"
-                },
-                "1": {
-                  "color": "green",
-                  "text": "ALL UP"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 0,
-        "y": 12
-      },
-      "id": 6,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "min(up{job=~\".+\"})",
-          "legendFormat": "all targets",
-          "refId": "A"
-        }
-      ],
-      "title": "All scrape targets",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Per-target scrape status over time across the full Prometheus estate.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "axisLabel": "up"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 6,
-        "y": 12
-      },
-      "id": 7,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -494,12 +377,21 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{job=~\".+\"}",
-          "legendFormat": "{{job}} {{instance}}",
+          "expr": "sum(rate(mosquitto_messages_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "received",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(mosquitto_messages_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "sent",
+          "refId": "B"
         }
       ],
-      "title": "Scrape target timeline",
+      "title": "Message rate by direction",
       "type": "timeseries"
     },
     {
@@ -507,61 +399,41 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Prometheus health for the Mosquitto exporter target.",
+      "description": "Publish message flow by direction.",
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "text": "DOWN"
-                },
-                "1": {
-                  "color": "green",
-                  "text": "UP"
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "custom": {
+            "axisLabel": "publishes/s"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
                 "color": "green",
-                "value": 1
+                "value": null
               }
             ]
           },
-          "unit": "short"
+          "unit": "msgps"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 18,
-        "y": 12
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 6
       },
-      "id": 8,
+      "id": 6,
       "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
         },
-        "textMode": "auto"
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -569,20 +441,29 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{job=\"mosquitto-exporter\"}",
-          "legendFormat": "Mosquitto exporter",
+          "expr": "sum(rate(mosquitto_publish_messages_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "publish received",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(mosquitto_publish_messages_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "publish sent",
+          "refId": "B"
         }
       ],
-      "title": "MQTT broker exporter up",
-      "type": "stat"
+      "title": "Publish messages rate",
+      "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Telemetry freshness by station from the backend inference loop.",
+      "description": "Broker uptime in seconds, displayed as a duration.",
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
@@ -592,14 +473,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 60
-              },
-              {
-                "color": "red",
-                "value": 180
               }
             ]
           },
@@ -608,14 +481,14 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 24,
-        "x": 0,
-        "y": 19
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 6
       },
-      "id": 9,
+      "id": 7,
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "center",
         "orientation": "auto",
@@ -634,42 +507,106 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pumpad_telemetry_freshness_seconds{station=~\".+\"}",
-          "legendFormat": "{{station}}",
+          "expr": "max(mosquitto_uptime_seconds{job=\"mosquitto-exporter\"})",
+          "legendFormat": "uptime",
           "refId": "A"
         }
       ],
-      "title": "Telemetry freshness by station",
+      "title": "Broker uptime",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Inbound and outbound broker byte throughput.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "bytes/s"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(mosquitto_bytes_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "bytes received",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(mosquitto_bytes_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "bytes sent",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(mosquitto_publish_bytes_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "publish bytes received",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(mosquitto_publish_bytes_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "legendFormat": "publish bytes sent",
+          "refId": "D"
+        }
+      ],
+      "title": "Bytes rate by direction",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
     "pdam-pump-sentinel",
-    "system-health"
+    "mqtt",
+    "broker"
   ],
   "templating": {
-    "list": [
-      {
-        "allValue": ".+",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "definition": "label_values(up, job)",
-        "includeAll": true,
-        "name": "target",
-        "options": [],
-        "query": "label_values(up, job)",
-        "refresh": 1,
-        "type": "query"
-      }
-    ]
+    "list": []
   },
   "time": {
     "from": "now-1h",
@@ -677,8 +614,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "PDAM Pump Sentinel - System Health",
-  "uid": "pumpad-system-health",
+  "title": "PDAM Pump Sentinel - MQTT Broker",
+  "uid": "pumpad-mqtt-broker",
   "version": 1,
   "weekStart": ""
 }

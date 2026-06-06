@@ -1,12 +1,75 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 0,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "limit": 100,
+        "name": "Retraining events",
+        "tags": [
+          "retraining",
+          "model"
+        ],
+        "tagsField": "tags",
+        "type": "tags"
+      },
+      {
+        "builtIn": 0,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 152, 48, 1)",
+        "limit": 100,
+        "name": "Drift events",
+        "tags": [
+          "drift"
+        ],
+        "tagsField": "tags",
+        "type": "tags"
+      },
+      {
+        "builtIn": 0,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(50, 200, 50, 1)",
+        "limit": 100,
+        "name": "Model promotion events",
+        "tags": [
+          "model-promotion"
+        ],
+        "tagsField": "tags",
+        "type": "tags"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "MLOps Loop",
+      "type": "link",
+      "url": "/d/pumpad-mlops"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "System Health",
+      "type": "link",
+      "url": "/d/pumpad-system-health"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
@@ -64,7 +127,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_mqtt_messages_received_total[5m]))",
+          "expr": "sum(rate(routemq_mqtt_messages_received_total{job=\"$service\"}[5m]))",
           "legendFormat": "received",
           "refId": "A"
         },
@@ -73,7 +136,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_mqtt_messages_succeeded_total[5m]))",
+          "expr": "sum(rate(routemq_mqtt_messages_succeeded_total{job=\"$service\"}[5m]))",
           "legendFormat": "succeeded",
           "refId": "B"
         },
@@ -82,7 +145,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_mqtt_messages_failed_total[5m]))",
+          "expr": "sum(rate(routemq_mqtt_messages_failed_total{job=\"$service\"}[5m]))",
           "legendFormat": "failed",
           "refId": "C"
         }
@@ -145,7 +208,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_telemetry_points_accepted_total[5m]))",
+          "expr": "sum(rate(routemq_telemetry_points_accepted_total{job=\"$service\"}[5m]))",
           "legendFormat": "accepted",
           "refId": "A"
         },
@@ -154,7 +217,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_telemetry_points_flushed_total[5m]))",
+          "expr": "sum(rate(routemq_telemetry_points_flushed_total{job=\"$service\"}[5m]))",
           "legendFormat": "flushed",
           "refId": "B"
         },
@@ -163,7 +226,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_telemetry_points_dropped_total[5m]))",
+          "expr": "sum(rate(routemq_telemetry_points_dropped_total{job=\"$service\"}[5m]))",
           "legendFormat": "dropped",
           "refId": "C"
         }
@@ -228,7 +291,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(rate(routemq_mqtt_messages_failed_total[5m])) / clamp_min(sum(rate(routemq_mqtt_messages_received_total[5m])), 0.001)",
+          "expr": "100 * sum(rate(routemq_mqtt_messages_failed_total{job=\"$service\"}[5m])) / clamp_min(sum(rate(routemq_mqtt_messages_received_total{job=\"$service\"}[5m])), 0.001)",
           "legendFormat": "failed share",
           "refId": "A"
         }
@@ -293,7 +356,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(rate(routemq_telemetry_points_dropped_total[5m])) / clamp_min(sum(rate(routemq_telemetry_points_accepted_total[5m])) + sum(rate(routemq_telemetry_points_dropped_total[5m])), 0.001)",
+          "expr": "100 * sum(rate(routemq_telemetry_points_dropped_total{job=\"$service\"}[5m])) / clamp_min(sum(rate(routemq_telemetry_points_accepted_total{job=\"$service\"}[5m])) + sum(rate(routemq_telemetry_points_dropped_total{job=\"$service\"}[5m])), 0.001)",
           "legendFormat": "drop share",
           "refId": "A"
         }
@@ -370,7 +433,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(routemq_telemetry_points_accepted_total[5m]))",
+          "expr": "sum(rate(routemq_telemetry_points_accepted_total{job=\"$service\"}[5m]))",
           "legendFormat": "accepted telemetry",
           "refId": "A"
         }
@@ -434,7 +497,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(routemq_telemetry_queue_depth)",
+          "expr": "sum(routemq_telemetry_queue_depth{job=\"$service\"})",
           "legendFormat": "queued points",
           "refId": "A"
         }
@@ -509,7 +572,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{job=\"routemq-app\"}",
+          "expr": "up{job=\"$service\", instance=~\"$instance\"}",
           "legendFormat": "RouteMQ app",
           "refId": "A"
         }
@@ -526,7 +589,42 @@
     "observability"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "text": "routemq-app",
+          "value": "routemq-app"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(up, job)",
+        "includeAll": true,
+        "name": "service",
+        "options": [],
+        "query": "label_values(up, job)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(up{job=\"$service\"}, instance)",
+        "includeAll": true,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(up{job=\"$service\"}, instance)",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",
