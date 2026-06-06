@@ -1,24 +1,10 @@
 from __future__ import annotations
 
-import socket
 from typing import Any
 
 import streamlit as st
 
-from dashboard import data
-
-
-def _status_pill(text: str, tone: str) -> None:
-    color = {'green': 'green', 'yellow': 'orange', 'red': 'red'}.get(tone, 'gray')
-    st.markdown(f'### :{color}[{text}]')
-
-
-def _redis_connected() -> bool:
-    try:
-        with socket.create_connection(('localhost', 6379), timeout=0.25):
-            return True
-    except OSError:
-        return False
+from dashboard import data, widgets
 
 
 def _station_from_state(stations: list[str]) -> str | None:
@@ -57,31 +43,18 @@ def _score(value: Any) -> str:
         return 'N/A'
 
 
-active = data.get_active_model()
-redis_ok = _redis_connected()
-active_ok = bool(active and _model_version(active) != 'N/A')
-
-if active_ok and redis_ok:
-    health_text, health_tone = 'HEALTHY', 'green'
-elif active_ok or redis_ok:
-    health_text, health_tone = 'DEGRADED', 'yellow'
-else:
-    health_text, health_tone = 'OFFLINE', 'red'
-
-hero, health = st.columns([3, 1])
-with hero:
-    st.title('PDAM Pump Sentinel')
-    st.caption('Consolidated MLOps overview for pump anomaly detection and retraining operations.')
-with health:
-    st.caption('MLOps Health')
-    _status_pill(health_text, health_tone)
-
 stations = data.list_stations()
 station = _station_from_state(stations)
+
+st.title('PDAM Pump Sentinel')
+widgets.render_global_status_banner(station=station)
+st.caption('Consolidated MLOps overview for pump anomaly detection and retraining operations.')
+
 if not station:
     st.warning('No pump stations found.')
     st.stop()
 
+active = data.get_active_model()
 reading = data.get_latest_reading(station)
 anomaly = data.get_latest_anomaly(station)
 drift = data.get_drift_result()

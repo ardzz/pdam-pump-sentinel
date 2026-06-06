@@ -55,7 +55,53 @@ class FakeMlflowClient:
 
 
 def _raise():
-    raise RuntimeError('offline')
+    raise data.redis.RedisError('offline')
+
+
+@pytest.fixture(autouse=True)
+def clear_dashboard_data_caches():
+    for reader_name in (
+        'get_latest_reading',
+        'get_latest_anomaly',
+        'get_drift_result',
+        'get_retrain_result',
+        'get_active_model',
+        'get_anomaly_history',
+        'get_model_versions',
+        'list_stations',
+    ):
+        getattr(data, reader_name).clear()
+    yield
+    for reader_name in (
+        'get_latest_reading',
+        'get_latest_anomaly',
+        'get_drift_result',
+        'get_retrain_result',
+        'get_active_model',
+        'get_anomaly_history',
+        'get_model_versions',
+        'list_stations',
+    ):
+        getattr(data, reader_name).clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_streamlit_caches():
+    cached_readers = (
+        data.get_latest_reading,
+        data.get_latest_anomaly,
+        data.get_drift_result,
+        data.get_retrain_result,
+        data.get_active_model,
+        data.get_anomaly_history,
+        data.get_model_versions,
+        data.list_stations,
+    )
+    for reader in cached_readers:
+        reader.clear()
+    yield
+    for reader in cached_readers:
+        reader.clear()
 
 
 @pytest.mark.parametrize(

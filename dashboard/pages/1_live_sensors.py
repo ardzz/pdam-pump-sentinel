@@ -3,14 +3,19 @@ import plotly.express as px
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-from dashboard import data
+from dashboard import data, widgets
 
 st_autorefresh(interval=5 * 1000, key='live-sensors-refresh')
 
 st.title('Live Sensor Monitoring')
 
 stations = data.list_stations()
-station = st.selectbox('Select Pump Station', options=stations)
+current_station = st.session_state.get('live_station')
+station = str(current_station) if current_station in stations else (stations[0] if stations else None)
+widgets.render_global_status_banner(station=station)
+
+selected_index = stations.index(station) if station in stations else 0
+station = st.selectbox('Select Pump Station', options=stations, index=selected_index, key='live_station')
 
 if not station:
     st.warning('No pump stations found.')

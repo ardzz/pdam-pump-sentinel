@@ -6,27 +6,36 @@ from collections.abc import Iterable
 from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
+import redis  # type: ignore[reportMissingImports]
+import streamlit as st
+
 LATEST_READING_KEY = 'pumpad:latest:reading:{station}'
 LATEST_ANOMALY_KEY = 'pumpad:latest:anomaly:{station}'
 DRIFT_RESULT_KEY = 'pumpad:drift:result'
 RETRAIN_RESULT_KEY = 'pumpad:retrain:result'
 ACTIVE_MODEL_KEY = 'pumpad:active:model'
 
+_REDIS_CLIENT: Any | None = None
+_last_error: str | None = None
+
 
 def _redis_client() -> Any:
-    import redis  # type: ignore[reportMissingImports]
+    global _REDIS_CLIENT, _last_error
 
-    return redis.Redis(
-        host=os.getenv('REDIS_HOST', 'localhost'),
-        port=int(os.getenv('REDIS_PORT', '6379')),
-        db=int(os.getenv('REDIS_DB', '0')),
-        password=os.getenv('REDIS_PASSWORD') or None,
-        username=os.getenv('REDIS_USERNAME') or None,
-        socket_timeout=float(os.getenv('REDIS_SOCKET_TIMEOUT', '5.0')),
-        socket_connect_timeout=float(os.getenv('REDIS_SOCKET_CONNECT_TIMEOUT', '5.0')),
-        decode_responses=True,
-        health_check_interval=30,
-    )
+    if _REDIS_CLIENT is None:
+        client = redis.Redis(
+            host=os.getenv('REDIS_HOST', 'localhost'),
+            port=int(os.getenv('REDIS_PORT', '6379')),
+            decode_responses=True,
+        )
+        try:
+            client.ping()
+        except (redis.RedisError, ConnectionError) as exc:
+            _last_error = str(exc)
+            raise
+        _REDIS_CLIENT = client
+    _last_error = None
+    return _REDIS_CLIENT
 
 
 def _clickhouse_client() -> Any:
@@ -60,26 +69,32 @@ def _mlflow_client() -> Any:
     return MlflowClient()
 
 
+@st.cache_data(ttl=5)
 def get_latest_reading(station: str) -> dict[str, Any] | None:
     return _redis_json(LATEST_READING_KEY.format(station=station))
 
 
+@st.cache_data(ttl=5)
 def get_latest_anomaly(station: str) -> dict[str, Any] | None:
     return _redis_json(LATEST_ANOMALY_KEY.format(station=station))
 
 
+@st.cache_data(ttl=5)
 def get_drift_result() -> dict[str, Any] | None:
     return _redis_json(DRIFT_RESULT_KEY)
 
 
+@st.cache_data(ttl=5)
 def get_retrain_result() -> dict[str, Any] | None:
     return _redis_json(RETRAIN_RESULT_KEY)
 
 
+@st.cache_data(ttl=5)
 def get_active_model() -> dict[str, Any] | None:
     return _redis_json(ACTIVE_MODEL_KEY)
 
 
+@st.cache_data(ttl=5)
 def get_anomaly_history(station: str, limit: int = 200) -> list[dict[str, Any]]:
     try:
         client = _clickhouse_client()
@@ -96,6 +111,7 @@ def get_anomaly_history(station: str, limit: int = 200) -> list[dict[str, Any]]:
         return []
 
 
+@st.cache_data(ttl=5)
 def get_model_versions(model_name: str = 'PumpAD') -> list[dict[str, Any]]:
     try:
         client = _mlflow_client()
@@ -105,12 +121,37 @@ def get_model_versions(model_name: str = 'PumpAD') -> list[dict[str, Any]]:
         return []
 
 
+@st.cache_data(ttl=5)
 def list_stations() -> list[str]:
     stations = [station.strip() for station in os.getenv('STATIONS', '').split(',') if station.strip()]
     return stations or ['ipa_01']
 
 
+def get_last_error() -> str | None:
+    return _last_error
+
+
+def record_operator_action(kind: str, station: str, payload: dict[str, Any], ttl_seconds: int | None) -> bool:
+    global _last_error
+
+    try:
+        client = _redis_client()
+        key = _operator_action_key(kind, station, payload)
+        value = json.dumps({k: v for k, v in payload.items() if not k.startswith('_')})
+        if ttl_seconds is None:
+            client.set(key, value)
+        else:
+            client.set(key, value, ex=ttl_seconds)
+        _last_error = None
+        return True
+    except (redis.RedisError, ConnectionError, TypeError, ValueError) as exc:
+        _last_error = str(exc)
+        return False
+
+
 def _redis_json(key: str) -> dict[str, Any] | None:
+    global _last_error
+
     try:
         client = _redis_client()
         value = client.get(key)
@@ -121,9 +162,28 @@ def _redis_json(key: str) -> dict[str, Any] | None:
         payload = json.loads(value)
         if not isinstance(payload, dict):
             return None
+        _last_error = None
         return payload
-    except Exception:
+    except json.JSONDecodeError:
         return None
+    except (redis.RedisError, ConnectionError) as exc:
+        _last_error = str(exc)
+        return None
+
+
+def _operator_action_key(kind: str, station: str, payload: dict[str, Any]) -> str:
+    normalized_kind = kind.strip().lower()
+    if normalized_kind == 'mute':
+        return f'pumpad:anomaly:mute:{station}'
+    raw_ts = (
+        payload.get('_ts')
+        or payload.get('iso_ts')
+        or payload.get('source_timestamp')
+        or payload.get('timestamp')
+        or payload.get('observed_at')
+        or 'unknown'
+    )
+    return f'pumpad:anomaly:{normalized_kind}:{station}:{raw_ts}'
 
 
 def _query_result_dicts(result: Any) -> list[dict[str, Any]]:
@@ -161,9 +221,11 @@ __all__ = [
     'get_active_model',
     'get_anomaly_history',
     'get_drift_result',
+    'get_last_error',
     'get_latest_anomaly',
     'get_latest_reading',
     'get_model_versions',
     'get_retrain_result',
     'list_stations',
+    'record_operator_action',
 ]

@@ -14,6 +14,7 @@ pages = [
     st.Page('pages/3_model_registry.py', title='Model Registry', icon=':material/smart_toy:'),
     st.Page('pages/4_drift_reports.py', title='Drift & Training', icon=':material/trending_down:'),
     st.Page('pages/5_system_health.py', title='System Health', icon=':material/monitor_heart:'),
+    st.Page('pages/6_runbook.py', title='Operator Runbook', icon=':material/menu_book:'),
 ]
 
 pg = st.navigation(pages)
