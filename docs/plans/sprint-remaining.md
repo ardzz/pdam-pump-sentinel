@@ -1,6 +1,15 @@
 # Sprint — Remaining Tasks
 
-Status snapshot grounded in `git log` (HEAD `1322fb3`, ahead of `origin/main` by 3 commits pending push) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
+Status snapshot grounded in `git log` (HEAD `5521165`, ahead of `origin/main` by 5 commits pending push) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
+
+## Dashboard polish heavy (session 2026-06-06)
+
+Visual + observability uplift covering Grafana and Streamlit:
+
+- **Grafana refresh** (`9e3a57b`) — fixed metric name bug (`_total_total` → `_total` for Counter exposition), refined `pumpad.json` to 8 panels (MQTT lifecycle, MQTT failure %, telemetry lifecycle, telemetry drop %, inference throughput, queue depth, RouteMQ up, with a Health row divider), tags `[pdam-pump-sentinel, routemq, observability]`. Added 2 NEW dashboards: `pumpad-mlops.json` (6 panels covering MQTT volume, failures, drop ratio, throughput proxy, queue depth) and `pumpad-system-health.json` (5 panels including operator runbook markdown + scrape success/last seen).
+- **Streamlit theme + auto-refresh dep** (`f04cde8`) — `.streamlit/config.toml` with dark base + brand primary `#00b3a6`; `streamlit-autorefresh==1.0.1` added to pyproject.
+- **Streamlit polish heavy** (`5521165`) — added `dashboard/pages/0_overview.py` (consolidated landing: hero, MLOps Health pill, 4 KPI tiles, station picker, page index); added `dashboard/pages/5_system_health.py` (per-service probes for MLflow/Redis/ClickHouse/MQTT, 10 s autorefresh); polished `1_live_sensors.py` (5 s autorefresh, status banner, score sentiment delta), `2_anomaly_history.py` (anomaly-only toggle, time-range filter, summary tiles), `3_model_registry.py` (status pill, alias badge, relative-time formatting), `4_drift_reports.py` (traffic-light banner, drift share progress bar).
+- **DriftReportJob scheduling** (`b93019c`) — closes `labeling-notes §5` architectural gap. `ENABLE_DRIFT_SCHEDULER=true` + `DRIFT_INTERVAL_MINUTES=N` wires the drift → retrain chain into APScheduler.
 
 ## Done (verified)
 
@@ -53,7 +62,7 @@ From `labeling-strategy-notes.md §5`:
 - [ ] **Supervised promotion in retraining loop** — `app/jobs/retraining_job.py:76-90` extension to dispatch supervised training when labeled data accumulates.
 - [ ] **Supervised training alias setter** — `ml/training/train_supervised.py:816-850` accepts `alias` arg but does not actually set the alias in the MLflow registry. Wire it.
 - [ ] **MLflow alias polling in live app** — `app/services/inference.py` add a reload-polling thread so an externally-promoted MLflow `@champion` is picked up without a hot-swap call. (`46bc0c3` added cold-start fallback; runtime polling still missing.)
-- [ ] **DriftReportJob APScheduler hook** — `ml/monitoring/scheduler.py` add a drift hook so the drift → retrain chain runs automatically. Today the job exists but is not scheduled, so the chain is manual.
+- [x] **DriftReportJob APScheduler hook** — `ml/monitoring/scheduler.py` now exports `DriftScheduler`; bootstrap wires it under `ENABLE_DRIFT_SCHEDULER` env flag (`b93019c`). Interval via `DRIFT_INTERVAL_MINUTES` (default 15). Drift → retrain chain runs automatically when both schedulers enabled.
 
 From RouteMQ ↔ ML integration audit (this session):
 
