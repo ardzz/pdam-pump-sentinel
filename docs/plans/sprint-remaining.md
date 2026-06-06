@@ -1,6 +1,6 @@
 # Sprint — Remaining Tasks
 
-Status snapshot grounded in `git log` (HEAD `fe9f408`, ahead of `origin/main` by 6 commits pending push) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
+Status snapshot grounded in `git log` (HEAD `4e044fc`, ahead of `origin/main` by 3 commits pending push) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
 
 ## Industrial-grade dashboard push (session 2026-06-06, Option C)
 
@@ -50,7 +50,7 @@ Visual + observability uplift covering Grafana and Streamlit:
 ### Week 5 — Observability + Polish (remainder)
 
 - [ ] Slide deck → `docs/presentation/` (follow §13 demo storyboard, 13–14 min). Include MLflow Compare-Runs screenshots from experiment `pump_sentinel_model_comparison` and the per-iteration curves (LSTM-AE epoch loss, XGB/LGBM logloss-per-round). Pull from `labeling-strategy-notes.md` for industry/academic backing.
-- [ ] ADR docs → `docs/adr/` (key decisions: honest-eval split strategy, no point-adjustment, champion-challenger gate, MLflow alias pattern, MLflow Datasets + traceability tags choices).
+- [x] **ADR docs** → `docs/adr/` 5 records landed (`c150845`): 0001 honest-eval split strategy (155 lines), 0002 no point-adjustment (176 lines), 0003 champion-challenger promotion gate (141 lines), 0004 MLflow alias pattern (172 lines), 0005 MLflow Datasets + traceability tags (135 lines). Each follows MADR template (Status, Date, Tags, Context, Decision Drivers, Considered Options, Decision Outcome, Consequences, Verification with file:line citations, References with academic + vendor URLs).
 - [x] **Demo script automation** — `scripts/run_e2e_demo.py` + `make demo` / `make demo-fast` / `make demo-skip-retrain` targets (`0ace5a7` + `1322fb3`). Covers all §13.1 phases T+0..T+8 with per-phase banners, asserts, and PASS/FAIL exit code: T+0 baseline precondition (active model + alias + ClickHouse table); T+1 replay normal; T+2 replay anomalous; T+3 inject drift via `scripts/inject_drift.py`; T+4 Evidently `DriftResult` (drift_share + dataset_drift); T+5 inline `RetrainingJob.handle` (deterministic, no queue worker required); T+6 MLflow run + challenger version verification; T+7 dynamic alias promotion to challenger version; T+8 `set_inference_service(load_champion_service(...))` in-process hot-swap + replay → asserts `Redis pumpad:latest:anomaly:{station}.model_version == challenger`. Verified live against running stack: all 9 phases PASS. Pytest variant under `tests/e2e/` not implemented (architectural follow-up).
 - [ ] Proposal final pass (`docs/proposal.md`).
 - [ ] README polish — surface `make mlflow-report`, MQTT topics `factory/skab/{station}/telemetry` and `factory/skab/{station}/anomaly`, and known limitations (no auto-refresh, synchronous inference path).
