@@ -1,4 +1,4 @@
-.PHONY: help install dev dev-down run queue-work replay inject-drift retrain dashboard mlflow mlflow-report skab-eda train-pca train-pca-split test lint format ps logs
+.PHONY: help install dev dev-down run queue-work replay inject-drift retrain dashboard mlflow mlflow-report skab-eda train-pca train-pca-split test lint format ps logs demo demo-fast demo-skip-retrain
 
 PYTHON ?= uv run python
 SKAB_EDA ?= $(PYTHON) scripts/generate_skab_eda.py
@@ -66,6 +66,15 @@ queue-work:
 
 replay:
 	uv run python scripts/replay_skab.py --input $(REPLAY_INPUT) --station $(REPLAY_STATION) --host $(REPLAY_HOST) --port $(REPLAY_PORT) $(if $(REPLAY_LIMIT),--limit $(REPLAY_LIMIT),) $(REPLAY_EXTRA_ARGS)
+
+demo:
+	uv run python scripts/run_e2e_demo.py --clean $(DEMO_EXTRA_ARGS)
+
+demo-fast:
+	uv run python scripts/run_e2e_demo.py --clean --fast $(DEMO_EXTRA_ARGS)
+
+demo-skip-retrain:
+	uv run python scripts/run_e2e_demo.py --clean --skip-retrain --fast $(DEMO_EXTRA_ARGS)
 
 inject-drift:
 	uv run python scripts/inject_drift.py
