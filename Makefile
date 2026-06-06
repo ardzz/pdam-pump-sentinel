@@ -1,4 +1,4 @@
-.PHONY: help install dev dev-down run queue-work replay inject-drift retrain dashboard mlflow mlflow-report skab-eda train-pca train-pca-split test lint format ps logs demo demo-fast demo-skip-retrain
+.PHONY: help install dev dev-down run queue-work replay inject-drift retrain dashboard mlflow mlflow-report skab-eda train-pca train-pca-split test lint format ps logs demo demo-fast demo-skip-retrain screenshots screenshots-list
 
 PYTHON ?= uv run python
 SKAB_EDA ?= $(PYTHON) scripts/generate_skab_eda.py
@@ -75,6 +75,16 @@ demo-fast:
 
 demo-skip-retrain:
 	uv run python scripts/run_e2e_demo.py --clean --skip-retrain --fast $(DEMO_EXTRA_ARGS)
+
+SCREENSHOT_TAG ?= capture
+SCREENSHOT_OUT_DIR ?= docs/presentation/screenshots
+SCREENSHOT_TARGETS ?=
+
+screenshots:
+	uv run python scripts/capture_screenshots.py --tag $(SCREENSHOT_TAG) --out-dir $(SCREENSHOT_OUT_DIR) $(if $(SCREENSHOT_TARGETS),--targets $(SCREENSHOT_TARGETS),)
+
+screenshots-list:
+	uv run python scripts/capture_screenshots.py --list
 
 inject-drift:
 	uv run python scripts/inject_drift.py
