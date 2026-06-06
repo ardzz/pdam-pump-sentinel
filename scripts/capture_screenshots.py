@@ -78,31 +78,31 @@ DEFAULT_TARGETS: tuple[Target, ...] = (
         label='streamlit-home',
         url='http://localhost:8501/',
         description='Streamlit dashboard landing page',
-        wait_seconds=5,
+        wait_seconds=12,
     ),
     Target(
         label='streamlit-live-sensors',
         url='http://localhost:8501/live_sensors',
         description='Streamlit Live Sensors page (anomaly status + score)',
-        wait_seconds=5,
+        wait_seconds=12,
     ),
     Target(
         label='streamlit-anomaly-history',
         url='http://localhost:8501/anomaly_history',
         description='Streamlit Anomaly History page (score timeline)',
-        wait_seconds=5,
+        wait_seconds=12,
     ),
     Target(
         label='streamlit-model-registry',
         url='http://localhost:8501/model_registry',
         description='Streamlit Model Registry page (name/version/activated_at)',
-        wait_seconds=5,
+        wait_seconds=12,
     ),
     Target(
         label='streamlit-drift-reports',
         url='http://localhost:8501/drift_reports',
         description='Streamlit Drift & Training page',
-        wait_seconds=5,
+        wait_seconds=12,
     ),
 )
 
