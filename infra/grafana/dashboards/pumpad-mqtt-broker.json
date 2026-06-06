@@ -204,7 +204,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(mosquitto_clients_connected{job=\"mosquitto-exporter\"})",
+          "expr": "sum(broker_clients_connected{job=\"mosquitto-exporter\"})",
           "legendFormat": "connected",
           "refId": "A"
         }
@@ -265,7 +265,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(mosquitto_retained_messages_total{job=\"mosquitto-exporter\"})",
+          "expr": "sum(broker_retained_messages_count{job=\"mosquitto-exporter\"})",
           "legendFormat": "retained",
           "refId": "A"
         }
@@ -322,7 +322,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(mosquitto_subscriptions_total{job=\"mosquitto-exporter\"})",
+          "expr": "sum(broker_subscriptions_count{job=\"mosquitto-exporter\"})",
           "legendFormat": "subscriptions",
           "refId": "A"
         }
@@ -377,7 +377,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_messages_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_messages_received{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "received",
           "refId": "A"
         },
@@ -386,7 +386,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_messages_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_messages_sent{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "sent",
           "refId": "B"
         }
@@ -441,7 +441,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_publish_messages_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_publish_messages_received{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "publish received",
           "refId": "A"
         },
@@ -450,7 +450,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_publish_messages_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_publish_messages_sent{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "publish sent",
           "refId": "B"
         }
@@ -507,7 +507,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(mosquitto_uptime_seconds{job=\"mosquitto-exporter\"})",
+          "expr": "max(broker_uptime{job=\"mosquitto-exporter\"})",
           "legendFormat": "uptime",
           "refId": "A"
         }
@@ -562,7 +562,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_bytes_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_bytes_received{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "bytes received",
           "refId": "A"
         },
@@ -571,7 +571,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_bytes_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_bytes_sent{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "bytes sent",
           "refId": "B"
         },
@@ -580,7 +580,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_publish_bytes_received_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_publish_bytes_received{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "publish bytes received",
           "refId": "C"
         },
@@ -589,7 +589,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mosquitto_publish_bytes_sent_total{job=\"mosquitto-exporter\"}[5m]))",
+          "expr": "sum(rate(broker_publish_bytes_sent{job=\"mosquitto-exporter\"}[5m]))",
           "legendFormat": "publish bytes sent",
           "refId": "D"
         }

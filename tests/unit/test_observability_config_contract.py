@@ -109,7 +109,7 @@ def test_grafana_mqtt_broker_dashboard_exists_and_queries_mosquitto():
 
     queries = _dashboard_queries(_load_dashboard('pumpad-mqtt-broker.json'))
     assert any(
-        'mosquitto_clients_connected' in query or 'mosquitto_messages_received_total' in query
+        'broker_clients_connected' in query or 'broker_messages_received' in query
         for query in queries
     )
 
