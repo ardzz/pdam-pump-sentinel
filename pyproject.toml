@@ -39,6 +39,7 @@ dependencies = [
     "redis>=5.0",
     "aiomysql>=0.2.0",
     "paho-mqtt>=2.0.0",
+    "prometheus-client>=0.20",
     "python-dotenv>=1.0.0",
     "lightgbm>=4.6.0",
     "xgboost>=3.2.0",
