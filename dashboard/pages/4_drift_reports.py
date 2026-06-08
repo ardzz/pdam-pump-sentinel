@@ -18,6 +18,29 @@ def _drift_share(drift: dict) -> float:
     return min(1.0, max(0.0, value))
 
 
+def _age_label(seconds: float | None) -> str:
+    if seconds is None:
+        return 'N/A'
+    value = int(seconds)
+    if value < 60:
+        return f'{value}s'
+    minutes = value // 60
+    if minutes < 60:
+        return f'{minutes}m'
+    hours = minutes // 60
+    if hours < 48:
+        return f'{hours}h'
+    return f'{hours // 24}d'
+
+
+def _duration_seconds(retrain: dict) -> float:
+    raw = retrain.get('duration_seconds', retrain.get('duration_sec', 0))
+    try:
+        return float(raw or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 st.title('Drift & Retrain Reports')
 
 drift = data.get_drift_result()
@@ -25,10 +48,12 @@ retrain = data.get_retrain_result()
 
 st.subheader('Model Drift Analysis')
 if drift:
-    st.info(f"Last analyzed: {drift.get('timestamp', 'N/A')}")
+    drift_ts = drift.get('timestamp') or drift.get('finished_at') or drift.get('created_at')
+    drift_age = data.timestamp_age_seconds(drift_ts)
+    st.info(f"Last analyzed: {drift_ts or 'N/A'}")
 
     metrics = drift.get('metrics', {}) if isinstance(drift.get('metrics'), dict) else {}
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
 
     drift_detected = _drift_detected(drift)
     status_text = 'DRIFT DETECTED' if drift_detected else 'STABLE'
@@ -45,6 +70,12 @@ if drift:
         c3.metric('Features Drifted', f"{drift.get('n_drifted', 'N/A')}/{drift.get('n_features', 'N/A')}")
     else:
         c3.metric('Method', drift.get('method', 'N/A'))
+    c4.metric('Drift Report Age', _age_label(drift_age))
+
+    if drift_age is None:
+        st.warning('Drift report timestamp is missing; verify the drift job wrote metadata.')
+    elif drift_age > 24 * 3600:
+        st.warning('Drift report is stale. Run the drift job before making model decisions.')
 
     st.progress(share)
     st.caption(f'Drift share: {share:.2f}')
@@ -67,7 +98,10 @@ if retrain:
     success = retrain.get('success', False)
     rc1.metric('Result', 'SUCCESS' if success else 'FAILED')
     rc2.metric('New Version', retrain.get('version', 'N/A'))
-    rc3.metric('Duration (s)', round(retrain.get('duration_sec', 0), 2))
+    rc3.metric('Duration (s)', round(_duration_seconds(retrain), 2))
+
+    if drift and _drift_detected(drift):
+        st.caption(f"Retrain linkage: drift report recommends reviewing candidate outcome `{retrain.get('reason', 'N/A')}`.")
 
     if not success and retrain.get('error'):
         st.error(f"Error: {retrain['error']}")

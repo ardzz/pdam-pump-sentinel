@@ -43,6 +43,21 @@ def _score(value: Any) -> str:
         return 'N/A'
 
 
+def _age_label(value: Any) -> str:
+    if value is None:
+        return 'N/A'
+    seconds = int(float(value))
+    if seconds < 60:
+        return f'{seconds}s'
+    minutes = seconds // 60
+    if minutes < 60:
+        return f'{minutes}m'
+    hours = minutes // 60
+    if hours < 48:
+        return f'{hours}h'
+    return f'{hours // 24}d'
+
+
 stations = data.list_stations()
 station = _station_from_state(stations)
 
@@ -84,6 +99,23 @@ selected_index = stations.index(station)
 station = st.selectbox('Select Pump Station', options=stations, index=selected_index, key='overview_station')
 reading = data.get_latest_reading(station)
 st.caption(f"Last reading: {(reading or {}).get('timestamp', 'N/A')}")
+
+snapshot = data.get_observability_snapshot(station)
+st.subheader('Observability Snapshot')
+st.caption('Operator-facing freshness and MLOps evidence for the active pump station.')
+obs_cols = st.columns(4)
+with obs_cols[0]:
+    st.metric('Telemetry Freshness', _age_label(snapshot.get('telemetry_age_seconds')))
+    st.caption(f"State: {snapshot['components']['telemetry']}")
+with obs_cols[1]:
+    st.metric('Drift Report Age', _age_label(snapshot.get('drift_report_age_seconds')))
+    st.caption(f"State: {snapshot['components']['drift_report']}")
+with obs_cols[2]:
+    st.metric('Active Model Age', _age_label(snapshot.get('active_model_age_seconds')))
+    st.caption(f"State: {snapshot['components']['active_model']}")
+with obs_cols[3]:
+    st.metric('Observability State', snapshot['state'])
+    st.caption(f"Retrain: {snapshot['retrain_result']}")
 
 st.subheader('What to do next')
 next_cols = st.columns(5)

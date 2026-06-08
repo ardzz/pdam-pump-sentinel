@@ -8,6 +8,16 @@ st.title('Operator Runbook')
 stations = data.list_stations()
 widgets.render_global_status_banner(station=stations[0] if stations else None)
 
+with st.expander('Metric-driven observability triage'):
+    st.markdown(
+        '- **Telemetry stale:** check `pumpad_telemetry_freshness_seconds`, then MQTT ingress, RouteMQ dispatch, Redis latest reading, and ClickHouse writes.\n'
+        '- **Inference errors:** check `pumpad_inference_events_total{result="error"}` and inspect the active model metadata before replaying telemetry.\n'
+        '- **Persistence errors:** check `pumpad_persistence_writes_total{result="error"}` by `target` to separate Redis latest-state issues from ClickHouse history issues.\n'
+        '- **Drift stale/detected:** check `pumpad_drift_report_age_seconds`, `pumpad_drift_detected`, and `pumpad_drift_share` before approving retraining.\n'
+        '- **Retraining slow/failed:** check `pumpad_retrain_duration_seconds` and `pumpad_retraining_jobs_total` before changing the active champion.\n\n'
+        '**Last reviewed:** 2026-06-08'
+    )
+
 with st.expander('Anomaly storm'):
     st.markdown(
         '- Confirm the storm scope: station, first seen time, current anomaly score, and top contributing sensor.\n'
