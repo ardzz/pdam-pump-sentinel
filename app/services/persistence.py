@@ -14,6 +14,8 @@ from routemq.tsdb.telemetry_adapters import (  # type: ignore[reportMissingImpor
     ClickHouseTelemetryAdapter,
 )
 
+from app.observability.metrics import PERSISTENCE_WRITES
+
 logger = logging.getLogger('PDAM.persistence')
 
 LATEST_READING_KEY = 'pumpad:latest:reading:{station}'
@@ -42,7 +44,9 @@ async def _persist_latest(
             return
         await redis_manager.set_json(LATEST_READING_KEY.format(station=station), dict(reading_payload))
         await redis_manager.set_json(LATEST_ANOMALY_KEY.format(station=station), dict(anomaly_payload))
+        PERSISTENCE_WRITES.labels(target='redis', result='success').inc()
     except Exception:
+        PERSISTENCE_WRITES.labels(target='redis', result='error').inc()
         logger.exception('failed to persist latest reading to Redis', extra={'station': station})
 
 
@@ -73,8 +77,12 @@ async def _persist_history(
                 attributes=attributes,
             )
             await telemetry.write(point)
+            if isinstance(telemetry.adapter, ClickHouseTelemetryAdapter):
+                PERSISTENCE_WRITES.labels(target='clickhouse', result='success').inc()
         await _persist_anomaly_score_row(station, anomaly_payload, attributes)
     except Exception:
+        if isinstance(telemetry.adapter, ClickHouseTelemetryAdapter):
+            PERSISTENCE_WRITES.labels(target='clickhouse', result='error').inc()
         logger.exception('failed to emit telemetry history point', extra={'station': station})
 
 
@@ -113,3 +121,4 @@ async def _persist_anomaly_score_row(
         [tuple(row.get(column) for column in CLICKHOUSE_TELEMETRY_COLUMNS)],
         column_names=list(CLICKHOUSE_TELEMETRY_COLUMNS),
     )
+    PERSISTENCE_WRITES.labels(target='clickhouse', result='success').inc()
