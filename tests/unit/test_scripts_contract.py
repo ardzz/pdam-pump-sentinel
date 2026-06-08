@@ -1,5 +1,7 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from importlib import import_module
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -16,6 +18,14 @@ def _seed_initial_models():
 
 def _trigger_retrain():
     return import_module('scripts.trigger_retrain')
+
+
+def _capture_screenshots():
+    return import_module('scripts.capture_screenshots')
+
+
+def _run_e2e_demo():
+    return import_module('scripts.run_e2e_demo')
 
 
 class FakeRedisManager:
@@ -173,10 +183,91 @@ def test_seed_initial_models_builds_champion_registration_config(monkeypatch, tm
     assert activated_at.utcoffset() == timezone.utc.utcoffset(None)
 
 
+def test_capture_screenshot_targets_include_phase6_observability_catalog():
+    capture_screenshots = _capture_screenshots()
+
+    labels = [target.label for target in capture_screenshots.DEFAULT_TARGETS]
+
+    assert len(labels) == len(set(labels))
+    assert set(labels) >= {
+        'grafana-pipeline-observability',
+        'grafana-mlops-observability',
+        'grafana-slo-health',
+        'streamlit-observability-snapshot',
+        'streamlit-runbook-observability',
+    }
+    assert all(label == label.lower() for label in labels)
+    assert all('_' not in label for label in labels)
+
+
+def test_makefile_supports_documented_screenshot_tag_alias():
+    makefile = Path('Makefile').read_text()
+
+    assert 'SCREENSHOT_TAG ?= $(if $(TAG),$(TAG),capture)' in makefile
+
+
+def test_run_e2e_demo_keeps_existing_default_phases_and_optional_observability_evidence():
+    run_e2e_demo = _run_e2e_demo()
+
+    phases = [(phase.label, phase.title, phase.requires_retrain) for phase in run_e2e_demo.PHASES]
+    config = run_e2e_demo.config_from_env([])
+    evidence_config = replace(config, observability_evidence=True)
+    evidence_phases = run_e2e_demo.storyboard_phases(evidence_config)
+
+    assert phases[-1] == ('T+8', 'Hot-swap and recover', True)
+    assert [label for label, _, _ in phases] == [f'T+{index}' for index in range(9)]
+    assert [phase.label for phase in run_e2e_demo.storyboard_phases(config)] == [f'T+{index}' for index in range(9)]
+    assert [(phase.label, phase.title, phase.requires_retrain) for phase in evidence_phases][-1] == (
+        'T+9',
+        'Collect observability evidence',
+        True,
+    )
+    assert [phase.label for phase in evidence_phases] == [f'T+{index}' for index in range(10)]
+    assert any(title == 'Hot-swap and recover' for _, title, _ in phases)
+
+
+def test_run_e2e_demo_env_boolean_false_values_disable_optional_evidence(monkeypatch):
+    run_e2e_demo = _run_e2e_demo()
+
+    for value in ('0', 'false', 'False', 'no', 'off', ''):
+        monkeypatch.setenv('DEMO_OBSERVABILITY_EVIDENCE', value)
+        assert run_e2e_demo.config_from_env([]).observability_evidence is False
+
+    monkeypatch.setenv('DEMO_OBSERVABILITY_EVIDENCE', 'true')
+    assert run_e2e_demo.config_from_env([]).observability_evidence is True
+
+
+def test_run_e2e_demo_drift_evidence_payload_matches_t9_contract():
+    run_e2e_demo = _run_e2e_demo()
+
+    payload = run_e2e_demo._drift_evidence_payload(
+        SimpleNamespace(
+            method='evidently',
+            threshold=0.5,
+            dataset_drift=True,
+            drift_share=0.75,
+            n_drifted=6,
+            n_features=8,
+            report_path='/tmp/report.html',
+        )
+    )
+
+    assert payload['method'] == 'evidently'
+    assert payload['threshold'] == 0.5
+    assert payload['dataset_drift'] is True
+    assert payload['drift_share'] == 0.75
+    assert payload['n_drifted'] == 6
+    assert payload['n_features'] == 8
+    assert payload['report_path'] == '/tmp/report.html'
+    datetime.fromisoformat(payload['timestamp'])
+
+
 @pytest.mark.parametrize(
     'module_name',
     [
+        'scripts.capture_screenshots',
         'scripts.inject_drift',
+        'scripts.run_e2e_demo',
         'scripts.seed_initial_models',
         'scripts.trigger_retrain',
     ],

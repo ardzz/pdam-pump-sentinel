@@ -75,9 +75,57 @@ DEFAULT_TARGETS: tuple[Target, ...] = (
         wait_seconds=8,
     ),
     Target(
+        label='grafana-pipeline-observability',
+        url='http://localhost:13000/d/pumpad-observability/pdam-pump-sentinel-routemq-observability?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv',
+        description='Grafana RouteMQ pipeline observability row (dispatch → inference → persistence flow)',
+        wait_seconds=8,
+    ),
+    Target(
+        label='grafana-mlops',
+        url='http://localhost:13000/d/pumpad-mlops/mlops-loop?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv',
+        description='Grafana MLOps Loop dashboard (model info, inference latency p50/p95/p99, anomaly heatmap, drift gauge, retraining counter)',
+        wait_seconds=8,
+    ),
+    Target(
+        label='grafana-mlops-observability',
+        url='http://localhost:13000/d/pumpad-mlops/mlops-loop?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv',
+        description='Grafana MLOps observability SLIs (inference events, anomaly severity, drift age, retrain duration, model age)',
+        wait_seconds=8,
+    ),
+    Target(
+        label='grafana-system-health',
+        url='http://localhost:13000/d/pumpad-system-health/system-health?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv',
+        description='Grafana System Health dashboard (scrape targets, telemetry freshness, exporter health)',
+        wait_seconds=8,
+    ),
+    Target(
+        label='grafana-slo-health',
+        url='http://localhost:13000/d/pumpad-system-health/system-health?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv',
+        description='Grafana SLO and dependency health row (persistence errors, app freshness, active model freshness)',
+        wait_seconds=8,
+    ),
+    Target(
+        label='grafana-mqtt-broker',
+        url='http://localhost:13000/d/pumpad-mqtt-broker/mqtt-broker?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv',
+        description='Grafana MQTT Broker dashboard (clients, message rate, throughput, uptime)',
+        wait_seconds=8,
+    ),
+    Target(
         label='streamlit-home',
         url='http://localhost:8501/',
         description='Streamlit dashboard landing page',
+        wait_seconds=12,
+    ),
+    Target(
+        label='streamlit-overview',
+        url='http://localhost:8501/overview',
+        description='Streamlit Overview landing (MLOps health pill, KPI tiles, station picker)',
+        wait_seconds=12,
+    ),
+    Target(
+        label='streamlit-observability-snapshot',
+        url='http://localhost:8501/overview',
+        description='Streamlit Overview Observability Snapshot cards (telemetry, drift, model age, overall state)',
         wait_seconds=12,
     ),
     Target(
@@ -103,6 +151,30 @@ DEFAULT_TARGETS: tuple[Target, ...] = (
         url='http://localhost:8501/drift_reports',
         description='Streamlit Drift & Training page',
         wait_seconds=12,
+    ),
+    Target(
+        label='streamlit-system-health',
+        url='http://localhost:8501/system_health',
+        description='Streamlit System Health page (per-service probes: MLflow/Redis/ClickHouse/MQTT)',
+        wait_seconds=12,
+    ),
+    Target(
+        label='streamlit-runbook',
+        url='http://localhost:8501/runbook',
+        description='Streamlit Runbook page (collapsible incident runbooks)',
+        wait_seconds=12,
+    ),
+    Target(
+        label='streamlit-runbook-observability',
+        url='http://localhost:8501/runbook',
+        description='Streamlit Runbook metric-driven observability triage expander',
+        wait_seconds=12,
+    ),
+    Target(
+        label='mlflow-compare-experiments',
+        url='http://localhost:5050/#/experiments',
+        description='MLflow report server (:5050) cross-family comparison experiment pump_sentinel_model_comparison',
+        wait_seconds=5,
     ),
 )
 

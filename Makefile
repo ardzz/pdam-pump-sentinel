@@ -76,7 +76,7 @@ demo-fast:
 demo-skip-retrain:
 	uv run python scripts/run_e2e_demo.py --clean --skip-retrain --fast $(DEMO_EXTRA_ARGS)
 
-SCREENSHOT_TAG ?= capture
+SCREENSHOT_TAG ?= $(if $(TAG),$(TAG),capture)
 SCREENSHOT_OUT_DIR ?= docs/presentation/screenshots
 SCREENSHOT_TARGETS ?=
 

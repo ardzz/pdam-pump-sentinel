@@ -52,6 +52,7 @@ class DemoConfig:
     clean: bool
     clean_active: bool
     no_assert: bool
+    observability_evidence: bool
     limit_normal: int
     limit_anomalous: int
     limit_drift: int
@@ -140,6 +141,12 @@ def config_from_env(argv: Sequence[str] | None = None) -> DemoConfig:
     parser.add_argument('--clean', action='store_true')
     parser.add_argument('--clean-active', action='store_true')
     parser.add_argument('--no-assert', action='store_true')
+    parser.add_argument(
+        '--observability-evidence',
+        action='store_true',
+        default=_env_enabled('DEMO_OBSERVABILITY_EVIDENCE'),
+        help='append the optional T+9 Redis/MLflow observability evidence check phase',
+    )
     parser.add_argument('--limit-normal', type=int, default=_env_optional_int('DEMO_LIMIT_NORMAL'))
     parser.add_argument('--limit-anomalous', type=int, default=_env_optional_int('DEMO_LIMIT_ANOMALOUS'))
     parser.add_argument('--limit-drift', type=int, default=_env_optional_int('DEMO_LIMIT_DRIFT'))
@@ -169,6 +176,7 @@ def config_from_env(argv: Sequence[str] | None = None) -> DemoConfig:
         clean=bool(args.clean),
         clean_active=bool(args.clean_active),
         no_assert=bool(args.no_assert),
+        observability_evidence=bool(args.observability_evidence),
         limit_normal=args.limit_normal or (3 if fast else 20),
         limit_anomalous=args.limit_anomalous or (3 if fast else 40),
         limit_drift=args.limit_drift or (3 if fast else 20),
@@ -266,7 +274,7 @@ async def execute_phase(phase: Phase, ctx: DemoContext, *, halt_on_failure: bool
 
 
 async def run_storyboard(ctx: DemoContext, phases: Sequence[Phase] = ()) -> bool:
-    selected = phases or PHASES
+    selected = phases or storyboard_phases(ctx.config)
     outcomes = []
     for phase in selected:
         outcome = await execute_phase(phase, ctx, halt_on_failure=not ctx.config.no_assert)
@@ -418,6 +426,7 @@ async def run_t4_detect_drift(ctx: DemoContext) -> None:
     current = pd.read_csv(ctx.drift_csv, sep=';')
     reference, current = _expand_tiny_frames(reference, current)
     ctx.drift_result = check_drift(reference, current, SENSOR_COLUMNS, drift_share=0.01)
+    await _redis_set_json(ctx.config, DRIFT_RESULT_KEY, _drift_evidence_payload(ctx.drift_result))
     LOGGER.info('→ action: Evidently drift report %s', ctx.drift_result)
 
 
@@ -463,7 +472,9 @@ async def run_t5_trigger_retrain(ctx: DemoContext) -> None:
     finally:
         disconnect = getattr(redis_manager, 'disconnect', None)
         if callable(disconnect):
-            await disconnect()
+            result = disconnect()
+            if inspect.isawaitable(result):
+                await result
     ctx.retrain_completed = True
 
 
@@ -577,6 +588,52 @@ async def assert_t8_hot_swap(ctx: DemoContext) -> list[AssertionResult]:
     ]
 
 
+async def run_t9_observability_evidence(ctx: DemoContext) -> None:
+    LOGGER.info('→ action: collect observability evidence payloads from Redis and MLflow')
+
+
+async def assert_t9_observability_evidence(ctx: DemoContext) -> list[AssertionResult]:
+    active_model = await _redis_get_json(ctx.config, ACTIVE_MODEL_KEY)
+    latest_reading = await _redis_get_json(ctx.config, LATEST_READING_KEY.format(station=ctx.config.station))
+    latest_anomaly = await _redis_get_json(ctx.config, LATEST_ANOMALY_KEY.format(station=ctx.config.station))
+    drift_result = await _redis_get_json(ctx.config, DRIFT_RESULT_KEY)
+    retrain_result = await _redis_get_json(ctx.config, RETRAIN_RESULT_KEY)
+    return [
+        AssertionResult(
+            'observability evidence includes active model freshness metadata',
+            isinstance(active_model, Mapping) and bool(_mapping_value(active_model, 'activated_at')),
+            repr(active_model),
+        ),
+        AssertionResult(
+            'observability evidence includes latest telemetry timestamp',
+            isinstance(latest_reading, Mapping) and bool(_mapping_value(latest_reading, 'timestamp')),
+            repr(latest_reading),
+        ),
+        AssertionResult(
+            'observability evidence includes latest anomaly score/model version',
+            isinstance(latest_anomaly, Mapping)
+            and _mapping_value(latest_anomaly, 'score') is not None
+            and bool(_mapping_value(latest_anomaly, 'model_version')),
+            repr(latest_anomaly),
+        ),
+        AssertionResult(
+            'observability evidence includes drift report metadata',
+            isinstance(drift_result, Mapping)
+            and _mapping_value(drift_result, 'method') == 'evidently'
+            and bool(_mapping_value(drift_result, 'timestamp')),
+            repr(drift_result),
+        ),
+        AssertionResult(
+            'observability evidence includes retraining lifecycle metadata',
+            isinstance(retrain_result, Mapping)
+            and bool(_mapping_value(retrain_result, 'started_at'))
+            and bool(_mapping_value(retrain_result, 'finished_at'))
+            and _mapping_value(retrain_result, 'duration_seconds') is not None,
+            repr(retrain_result),
+        ),
+    ]
+
+
 PHASES: tuple[Phase, ...] = (
     Phase('T+0', 'Baseline', run_t0_baseline, assert_t0_baseline),
     Phase('T+1', 'Replay SKAB normal segment', run_t1_replay_normal, assert_t1_replay_normal),
@@ -588,6 +645,20 @@ PHASES: tuple[Phase, ...] = (
     Phase('T+7', 'Promote model v2', run_t7_promote_v2, assert_t7_promote_v2, requires_retrain=True),
     Phase('T+8', 'Hot-swap and recover', run_t8_hot_swap, assert_t8_hot_swap, requires_retrain=True),
 )
+
+OBSERVABILITY_EVIDENCE_PHASE = Phase(
+    'T+9',
+    'Collect observability evidence',
+    run_t9_observability_evidence,
+    assert_t9_observability_evidence,
+    requires_retrain=True,
+)
+
+
+def storyboard_phases(config: DemoConfig) -> tuple[Phase, ...]:
+    if config.observability_evidence:
+        return (*PHASES, OBSERVABILITY_EVIDENCE_PHASE)
+    return PHASES
 
 
 def apply_process_env(config: DemoConfig) -> None:
@@ -604,7 +675,23 @@ def apply_process_env(config: DemoConfig) -> None:
 
 
 def _env_enabled(name: str) -> bool:
-    return bool(os.getenv(name))
+    value = os.getenv(name)
+    if value is None:
+        return False
+    return value.strip().lower() not in {'', '0', 'false', 'no', 'off'}
+
+
+def _drift_evidence_payload(result: Any) -> dict[str, Any]:
+    return {
+        'timestamp': datetime.now(UTC).isoformat(),
+        'method': getattr(result, 'method', 'evidently'),
+        'threshold': _jsonable(getattr(result, 'threshold', None)),
+        'dataset_drift': bool(getattr(result, 'dataset_drift', False)),
+        'drift_share': _jsonable(getattr(result, 'drift_share', 0.0)),
+        'n_drifted': _jsonable(getattr(result, 'n_drifted', 0)),
+        'n_features': _jsonable(getattr(result, 'n_features', 0)),
+        **({'report_path': str(getattr(result, 'report_path'))} if getattr(result, 'report_path', None) else {}),
+    }
 
 
 def _env_optional_int(name: str) -> int | None:
@@ -700,9 +787,13 @@ def _redis_client(config: DemoConfig) -> Any:
 async def _close_redis(client: Any) -> None:
     close = getattr(client, 'aclose', None)
     if callable(close):
-        await close()
+        result = close()
+        if inspect.isawaitable(result):
+            await result
         return
-    await client.close()
+    result = client.close()
+    if inspect.isawaitable(result):
+        await result
 
 
 async def _redis_get_json(config: DemoConfig, key: str) -> dict[str, Any] | None:
