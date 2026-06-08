@@ -10,7 +10,13 @@ from app.models.anomaly_event import (
     build_anomaly_payload_from_verdict,
     build_anomaly_topic,
 )
-from app.observability.metrics import ANOMALY_SCORE, INFERENCE_LATENCY, TELEMETRY_FRESHNESS
+from app.observability.metrics import (
+    ANOMALY_EVENTS,
+    ANOMALY_SCORE,
+    INFERENCE_EVENTS,
+    INFERENCE_LATENCY,
+    TELEMETRY_FRESHNESS,
+)
 from app.services.inference import get_inference_service
 from app.services.persistence import persist_telemetry
 
@@ -32,12 +38,29 @@ def _score_payload(station: str, payload: Any) -> dict[str, Any]:
     if service is not None and isinstance(sensors, Mapping) and sensors:
         timestamp = payload.get('timestamp') if isinstance(payload, Mapping) else None
         t0 = time.perf_counter()
-        verdict = service.observe(station, timestamp, sensors)
+        try:
+            verdict = service.observe(station, timestamp, sensors)
+        except Exception:
+            INFERENCE_EVENTS.labels(station=station, model_version='', result='error').inc()
+            raise
         elapsed = time.perf_counter() - t0
+        model_version = str(verdict.model_version)
+        INFERENCE_EVENTS.labels(station=station, model_version=model_version, result='success').inc()
         INFERENCE_LATENCY.labels(station=station, model_version=str(verdict.model_version)).observe(elapsed)
         if verdict.score is not None:
-            ANOMALY_SCORE.labels(station=station).observe(float(verdict.score))
+            score = float(verdict.score)
+            ANOMALY_SCORE.labels(station=station).observe(score)
+            if verdict.anomaly:
+                ANOMALY_EVENTS.labels(station=station, severity=_severity(score), model_version=model_version).inc()
         TELEMETRY_FRESHNESS.labels(station=station).set(0.0)
         return build_anomaly_payload_from_verdict(verdict)
 
     return build_anomaly_payload(station, payload)
+
+
+def _severity(score: float) -> str:
+    if score < 0.5:
+        return 'low'
+    if score < 1.0:
+        return 'medium'
+    return 'high'
