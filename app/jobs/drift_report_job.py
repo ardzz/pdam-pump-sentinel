@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImp
 
 from app.jobs.retraining_job import RetrainingJob
 from app.observability.annotations import post_annotation
-from app.observability.metrics import DRIFT_DETECTED, DRIFT_SHARE
+from app.observability.metrics import DRIFT_DETECTED, DRIFT_REPORT_AGE, DRIFT_SHARE
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.monitoring.drift_check import DriftResult, check_drift
 
@@ -36,6 +37,7 @@ class DriftReportJob(Job):
         payload = _drift_payload(result)
         DRIFT_SHARE.set(float(result.drift_share))
         DRIFT_DETECTED.set(1.0 if result.dataset_drift else 0.0)
+        DRIFT_REPORT_AGE.set(0.0)
         if result.dataset_drift:
             post_annotation(
                 text=f'Drift detected (share={result.drift_share:.3f}, n_drifted={result.n_drifted})',
@@ -61,12 +63,19 @@ def _load_drift_frames(job):
 
 
 def _drift_payload(result: DriftResult) -> dict[str, Any]:
-    return {
+    payload = {
+        'timestamp': datetime.now(UTC).isoformat(),
+        'method': str(getattr(result, 'method', 'evidently') or 'evidently'),
+        'threshold': float(getattr(result, 'threshold', os.getenv('DRIFT_SHARE_THRESHOLD', '0.5'))),
         'dataset_drift': bool(result.dataset_drift),
         'drift_share': float(result.drift_share),
         'n_drifted': int(result.n_drifted),
         'n_features': int(result.n_features),
     }
+    report_path = getattr(result, 'report_path', None)
+    if report_path:
+        payload['report_path'] = str(report_path)
+    return payload
 
 
 async def _write_redis_json(key: str, value: Mapping[str, Any]) -> None:

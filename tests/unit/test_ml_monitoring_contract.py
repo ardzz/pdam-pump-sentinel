@@ -31,6 +31,9 @@ def test_check_drift_detects_shifted_numeric_column():
     assert result.drift_share > 0.0
     assert result.n_drifted >= 1
     assert result.n_features == len(columns)
+    assert result.method == 'evidently'
+    assert result.threshold == 0.2
+    assert result.report_path is None
 
 
 def test_check_drift_reports_no_drift_for_identical_frame():
@@ -44,6 +47,8 @@ def test_check_drift_reports_no_drift_for_identical_frame():
     assert result.drift_share == 0.0
     assert result.n_drifted == 0
     assert result.n_features == len(columns)
+    assert result.method == 'evidently'
+    assert result.threshold == 0.2
 
 
 @pytest.mark.parametrize(

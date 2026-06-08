@@ -8,6 +8,7 @@ from routemq.job import Job  # type: ignore[reportMissingImports]
 from app.jobs import drift_report_job, retraining_job
 from app.jobs.drift_report_job import DriftReportJob
 from app.jobs.retraining_job import RetrainingJob
+from app.observability.metrics import ACTIVE_MODEL_AGE, DRIFT_REPORT_AGE, RETRAIN_DURATION, RETRAINING_JOBS
 from ml.monitoring.drift_check import DriftResult
 
 
@@ -37,10 +38,11 @@ async def test_retraining_job_promotes_challenger(monkeypatch, tmp_path):
         return SimpleNamespace(
             metrics={'f1': 0.9, 'false_alarm_rate': 0.1},
             output_dir=challenger_dir,
+            run_id='run-9',
         )
 
-    def from_artifacts(model_dir, model_version=None):
-        inference_calls.append((model_dir, model_version))
+    def load_service(model_dir):
+        inference_calls.append(model_dir)
         return sentinel
 
     def set_service(service):
@@ -52,33 +54,54 @@ async def test_retraining_job_promotes_challenger(monkeypatch, tmp_path):
 
     monkeypatch.setattr(retraining_job, 'train_pca_from_skab', train, raising=True)
     monkeypatch.setattr(retraining_job, '_read_champion_metrics', lambda: {'f1': 0.8, 'false_alarm_rate': 0.1})
-    monkeypatch.setattr(retraining_job.PcaAnomalyInferenceService, 'from_artifacts', staticmethod(from_artifacts))
+    monkeypatch.setattr(retraining_job, 'load_inference_service_from_artifacts', load_service, raising=True)
     monkeypatch.setattr(retraining_job, 'set_inference_service', set_service, raising=True)
     monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
     monkeypatch.setattr(retraining_job, '_promote_mlflow_champion_alias', promote_alias, raising=True)
 
-    await RetrainingJob().handle()
+    ACTIVE_MODEL_AGE.clear()
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
 
-    config = train_calls[0]
-    assert config.register_model is True
-    assert config.log_mlflow is True
-    assert config.alias == 'challenger'
-    assert config.registered_model_name == 'PumpAD'
-    assert inference_calls == [(challenger_dir, None), sentinel]
-    assert mlflow_calls == ['PumpAD']
-    active_model = fake_redis.values['pumpad:active:model']
-    assert active_model['registered_model_name'] == 'PumpAD'
-    assert active_model['alias'] == 'champion'
-    assert active_model['model_dir'] == str(challenger_dir)
-    assert active_model['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
-    assert active_model['mlflow_version'] == '9'
-    assert active_model['name'] == 'PumpAD'
-    assert active_model['version'] == '9'
-    activated_at = datetime.fromisoformat(active_model['activated_at'])
-    assert activated_at.tzinfo is not None
-    assert activated_at.utcoffset() == timezone.utc.utcoffset(None)
-    assert fake_redis.values['pumpad:retrain:result']['promoted'] is True
-    assert fake_redis.values['pumpad:retrain:result']['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
+        config = train_calls[0]
+        assert config.register_model is True
+        assert config.log_mlflow is True
+        assert config.alias == 'challenger'
+        assert config.registered_model_name == 'PumpAD'
+        assert inference_calls == [challenger_dir, sentinel]
+        assert mlflow_calls == ['PumpAD']
+        active_model = fake_redis.values['pumpad:active:model']
+        assert active_model['registered_model_name'] == 'PumpAD'
+        assert active_model['alias'] == 'champion'
+        assert active_model['model_dir'] == str(challenger_dir)
+        assert active_model['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
+        assert active_model['mlflow_version'] == '9'
+        assert active_model['name'] == 'PumpAD'
+        assert active_model['version'] == '9'
+        activated_at = datetime.fromisoformat(active_model['activated_at'])
+        assert activated_at.tzinfo is not None
+        assert activated_at.utcoffset() == timezone.utc.utcoffset(None)
+        assert fake_redis.values['pumpad:retrain:result']['promoted'] is True
+        assert fake_redis.values['pumpad:retrain:result']['success'] is True
+        assert fake_redis.values['pumpad:retrain:result']['version'] == '9'
+        assert fake_redis.values['pumpad:retrain:result']['run_id'] == 'run-9'
+        assert fake_redis.values['pumpad:retrain:result']['started_at']
+        assert fake_redis.values['pumpad:retrain:result']['finished_at']
+        assert fake_redis.values['pumpad:retrain:result']['duration_seconds'] >= 0
+        assert fake_redis.values['pumpad:retrain:result']['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
+        assert RETRAINING_JOBS.labels(result='promoted')._value.get() == 1
+        assert _metric_sample_value(
+            RETRAIN_DURATION,
+            'pumpad_retrain_duration_seconds_count',
+            {'result': 'promoted'},
+        ) == 1
+        assert ACTIVE_MODEL_AGE.labels(name='PumpAD', version='9', alias='champion')._value.get() == 0.0
+    finally:
+        ACTIVE_MODEL_AGE.clear()
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
 
 
 def test_active_model_version_uses_alias_label_without_mlflow_version():
@@ -96,8 +119,8 @@ async def test_retraining_job_rejects_challenger(monkeypatch, tmp_path):
             output_dir=tmp_path / 'challenger',
         )
 
-    def from_artifacts(model_dir, model_version=None):
-        inference_calls.append((model_dir, model_version))
+    def load_service(model_dir):
+        inference_calls.append(model_dir)
         return object()
 
     def promote_alias(model_name='PumpAD'):
@@ -106,18 +129,33 @@ async def test_retraining_job_rejects_challenger(monkeypatch, tmp_path):
 
     monkeypatch.setattr(retraining_job, 'train_pca_from_skab', train, raising=True)
     monkeypatch.setattr(retraining_job, '_read_champion_metrics', lambda: {'f1': 0.95, 'false_alarm_rate': 0.1})
-    monkeypatch.setattr(retraining_job.PcaAnomalyInferenceService, 'from_artifacts', staticmethod(from_artifacts))
+    monkeypatch.setattr(retraining_job, 'load_inference_service_from_artifacts', load_service, raising=True)
     monkeypatch.setattr(retraining_job, 'set_inference_service', lambda service: inference_calls.append(service), raising=True)
     monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
     monkeypatch.setattr(retraining_job, '_promote_mlflow_champion_alias', promote_alias, raising=True)
 
-    await RetrainingJob().handle()
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
 
-    assert inference_calls == []
-    assert mlflow_calls == []
-    assert 'pumpad:active:model' not in fake_redis.values
-    assert fake_redis.values['pumpad:retrain:result']['promoted'] is False
-    assert 'must exceed' in fake_redis.values['pumpad:retrain:result']['reason']
+        assert inference_calls == []
+        assert mlflow_calls == []
+        assert 'pumpad:active:model' not in fake_redis.values
+        assert fake_redis.values['pumpad:retrain:result']['promoted'] is False
+        assert fake_redis.values['pumpad:retrain:result']['success'] is True
+        assert fake_redis.values['pumpad:retrain:result']['version'] == 'challenger'
+        assert fake_redis.values['pumpad:retrain:result']['duration_seconds'] >= 0
+        assert 'must exceed' in fake_redis.values['pumpad:retrain:result']['reason']
+        assert RETRAINING_JOBS.labels(result='rejected')._value.get() == 1
+        assert _metric_sample_value(
+            RETRAIN_DURATION,
+            'pumpad_retrain_duration_seconds_count',
+            {'result': 'rejected'},
+        ) == 1
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
 
 
 async def test_drift_report_job_dispatches_retraining_on_drift(monkeypatch):
@@ -130,7 +168,7 @@ async def test_drift_report_job_dispatches_retraining_on_drift(monkeypatch):
 
     def check(reference, current, columns, drift_share=0.5):
         assert (reference, current) == frames
-        return DriftResult(dataset_drift=True, drift_share=1.0, n_drifted=8, n_features=8)
+        return DriftResult(dataset_drift=True, drift_share=1.0, n_drifted=8, n_features=8, threshold=0.5)
 
     async def dispatch(job):
         dispatched.append(job)
@@ -140,16 +178,22 @@ async def test_drift_report_job_dispatches_retraining_on_drift(monkeypatch):
     monkeypatch.setattr(drift_report_job, 'dispatch', dispatch, raising=True)
     monkeypatch.setattr(drift_report_job, 'redis_manager', fake_redis, raising=True)
 
+    DRIFT_REPORT_AGE.set(99.0)
+
     await DriftReportJob().handle()
 
     assert len(dispatched) == 1
     assert isinstance(dispatched[0], RetrainingJob)
-    assert fake_redis.values['pumpad:drift:result'] == {
+    assert fake_redis.values['pumpad:drift:result'] | {'timestamp': '<normalized>'} == {
+        'timestamp': '<normalized>',
+        'method': 'evidently',
+        'threshold': 0.5,
         'dataset_drift': True,
         'drift_share': 1.0,
         'n_drifted': 8,
         'n_features': 8,
     }
+    assert DRIFT_REPORT_AGE._value.get() == 0.0
 
 
 async def test_drift_report_job_skips_dispatch_without_drift(monkeypatch):
@@ -175,8 +219,51 @@ async def test_drift_report_job_skips_dispatch_without_drift(monkeypatch):
 
     assert dispatched == []
     assert fake_redis.values['pumpad:drift:result']['dataset_drift'] is False
+    assert fake_redis.values['pumpad:drift:result']['method'] == 'evidently'
+    assert fake_redis.values['pumpad:drift:result']['threshold'] == 0.5
+    assert fake_redis.values['pumpad:drift:result']['timestamp']
+
+
+async def test_retraining_job_records_error_payload(monkeypatch):
+    fake_redis = FakeRedisManager(enabled=True)
+
+    def train(config):
+        raise RuntimeError('training failed')
+
+    monkeypatch.setattr(retraining_job, 'train_pca_from_skab', train, raising=True)
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        try:
+            await RetrainingJob().handle()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('expected retraining failure')
+
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['success'] is False
+        assert payload['promoted'] is False
+        assert payload['reason'] == 'error'
+        assert payload['version'] == 'unknown'
+        assert payload['error'] == 'training failed'
+        assert payload['duration_seconds'] >= 0
+        assert RETRAINING_JOBS.labels(result='error')._value.get() == 1
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
 
 
 def test_mlops_jobs_allowlist_round_trip():
     assert isinstance(Job.unserialize(RetrainingJob().serialize()), RetrainingJob)
     assert isinstance(Job.unserialize(DriftReportJob().serialize()), DriftReportJob)
+
+
+def _metric_sample_value(metric, sample_name, labels):
+    for family in metric.collect():
+        for sample in family.samples:
+            if sample.name == sample_name and sample.labels == labels:
+                return sample.value
+    raise AssertionError(f'missing sample {sample_name} {labels}')

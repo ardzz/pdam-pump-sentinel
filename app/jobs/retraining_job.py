@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from importlib import import_module
@@ -15,7 +16,7 @@ from routemq.job import Job  # type: ignore[reportMissingImports]
 from routemq.redis_manager import redis_manager  # type: ignore[reportMissingImports]
 
 from app.observability.annotations import post_annotation
-from app.observability.metrics import RETRAINING_JOBS, set_model_info
+from app.observability.metrics import ACTIVE_MODEL_AGE, RETRAIN_DURATION, RETRAINING_JOBS, set_model_info
 from app.services.inference import MODEL_DIR_ENV, set_inference_service
 from ml.inference.loader import load_inference_service_from_artifacts
 from ml.inference.pca_inference import PcaAnomalyInferenceService as PcaAnomalyInferenceService
@@ -34,6 +35,8 @@ class RetrainingJob(Job):
     queue = 'mlops'
 
     async def handle(self) -> None:
+        started_at = datetime.now(timezone.utc)
+        started = time.perf_counter()
         try:
             config = _training_config()
             result = train_pca_from_skab(config)
@@ -59,10 +62,18 @@ class RetrainingJob(Job):
                 )
                 await _write_redis_json(ACTIVE_MODEL_KEY, active_model)
                 set_model_info(active_model)
+                ACTIVE_MODEL_AGE.labels(
+                    name=active_model['name'],
+                    version=active_model['version'],
+                    alias=active_model['alias'],
+                ).set(0.0)
 
             result_label = 'promoted' if promoted else 'rejected'
             version = str(mlflow_version or 'challenger')
+            finished_at = datetime.now(timezone.utc)
+            duration_seconds = time.perf_counter() - started
             RETRAINING_JOBS.labels(result=result_label).inc()
+            RETRAIN_DURATION.labels(result=result_label).observe(duration_seconds)
             post_annotation(text=f'Retraining v{version} {result_label}', tags=['retraining', 'model'])
             if promoted and mlflow_version is not None:
                 post_annotation(text=f'Champion → v{version}', tags=['model-promotion', 'champion'])
@@ -71,14 +82,38 @@ class RetrainingJob(Job):
             await _write_redis_json(
                 RETRAIN_RESULT_KEY,
                 {
+                    'started_at': started_at.isoformat(),
+                    'finished_at': finished_at.isoformat(),
+                    'duration_seconds': duration_seconds,
+                    'success': True,
                     'promoted': promoted,
                     'reason': reason,
+                    'version': version,
+                    'run_id': None if getattr(result, 'run_id', None) is None else str(getattr(result, 'run_id')),
                     'metrics': metrics_payload,
                 },
             )
-        except Exception:
+        except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+            duration_seconds = time.perf_counter() - started
             RETRAINING_JOBS.labels(result='error').inc()
+            RETRAIN_DURATION.labels(result='error').observe(duration_seconds)
             post_annotation(text='Retraining vunknown error', tags=['retraining', 'model'])
+            await _write_redis_json(
+                RETRAIN_RESULT_KEY,
+                {
+                    'started_at': started_at.isoformat(),
+                    'finished_at': finished_at.isoformat(),
+                    'duration_seconds': duration_seconds,
+                    'success': False,
+                    'promoted': False,
+                    'reason': 'error',
+                    'version': 'unknown',
+                    'run_id': None,
+                    'error': str(exc),
+                    'metrics': {},
+                },
+            )
             raise
 
 

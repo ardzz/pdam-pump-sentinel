@@ -629,6 +629,7 @@ def _model_signature_kwargs(result: Any) -> dict[str, Any]:
 
 def _run_traceability_tags() -> dict[str, str]:
     tags = {
+        'observability.schema_version': _observability_schema_version(),
         'git.commit.sha': _git_output('rev-parse', 'HEAD') or 'unknown',
         'git.branch': _git_output('branch', '--show-current') or 'unknown',
         'git.is_dirty': 'true' if _git_output('status', '--short') else 'false',
@@ -644,6 +645,14 @@ def _run_traceability_tags() -> dict[str, str]:
     ):
         tags[tag_name] = _package_version(package_name)
     return tags
+
+
+def _observability_schema_version() -> str:
+    try:
+        from app.observability.metrics import OBSERVABILITY_SCHEMA_VERSION
+    except Exception:
+        return 'unknown'
+    return OBSERVABILITY_SCHEMA_VERSION
 
 
 def _git_output(*args: str) -> str | None:

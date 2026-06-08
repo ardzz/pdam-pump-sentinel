@@ -32,6 +32,7 @@ def _install_fake_mlflow(monkeypatch, *, run_id: str | None = 'run-123', model_v
         'aliases': [],
         'searches': [],
         'start_runs': [],
+        'tags': [],
     }
 
     mlflow = types.ModuleType('mlflow')
@@ -57,12 +58,16 @@ def _install_fake_mlflow(monkeypatch, *, run_id: str | None = 'run-123', model_v
     def set_registered_model_alias(name, alias, version):
         calls['aliases'].append((name, alias, version))
 
+    def set_tags(tags):
+        calls['tags'].append(dict(tags))
+
     mlflow_any.set_tracking_uri = set_tracking_uri
     mlflow_any.start_run = start_run
     mlflow_any.log_params = log_params
     mlflow_any.log_metrics = log_metrics
     mlflow_any.log_artifacts = log_artifacts
     mlflow_any.set_registered_model_alias = set_registered_model_alias
+    mlflow_any.set_tags = set_tags
 
     sklearn = types.ModuleType('mlflow.sklearn')
     sklearn_any = cast(Any, sklearn)
@@ -166,6 +171,8 @@ def test_log_pca_training_run_logs_payload_artifacts_model_registration_and_alia
     ]
     assert calls['aliases'] == [('PumpADCandidate', 'champion', '7')]
     assert calls['searches'] == ["run_id='run-123'"]
+    assert calls['tags'][0]['observability.schema_version'].startswith('2026-06-08')
+    assert 'git.commit.sha' in calls['tags'][0]
 
 
 def test_log_pca_training_run_skips_optional_registration_alias_and_missing_run_id(monkeypatch):

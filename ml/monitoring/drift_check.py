@@ -16,6 +16,9 @@ class DriftResult:
     drift_share: float
     n_drifted: int
     n_features: int
+    method: str = 'evidently'
+    threshold: float = 0.5
+    report_path: str | None = None
 
 
 def check_drift(
@@ -37,6 +40,8 @@ def check_drift(
         drift_share=observed_share,
         n_drifted=n_drifted,
         n_features=len(selected_columns),
+        method='evidently',
+        threshold=float(drift_share),
     )
 
 
