@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.error import URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import streamlit as st
@@ -22,6 +24,9 @@ def render_global_status_banner(station: str | None = None) -> str:
 
     st.markdown(f'### :{color}[{state}] Operator Console Health')
     st.caption(summary)
+    failed = [(name, detail) for name, (ok, detail) in checks.items() if not ok]
+    if failed:
+        st.caption('Action needed: ' + ' · '.join(f'{name}: {detail}' for name, detail in failed))
     redis_error = data.get_last_error()
     if redis_error:
         st.caption(f'Redis unreachable: {redis_error}')
@@ -111,15 +116,16 @@ def _write_operator_action(kind: str, station: str, payload: dict[str, Any], ttl
 
 
 def _probe_mlflow() -> tuple[bool, str]:
-    return _http_probe('http://localhost:5000/health')
+    return _http_probe(_mlflow_health_url())
 
 
 def _probe_clickhouse() -> tuple[bool, str]:
-    return _http_probe('http://localhost:18123/ping')
+    return _http_probe(_clickhouse_ping_url())
 
 
 def _probe_mqtt() -> tuple[bool, str]:
-    return _tcp_probe('localhost', 11883)
+    host, port = _mqtt_endpoint()
+    return _tcp_probe(host, port)
 
 
 def _probe_redis() -> tuple[bool, str]:
@@ -145,6 +151,18 @@ def _probe_active_model() -> tuple[bool, str]:
 def _probe_telemetry_freshness(station: str | None) -> tuple[bool, str]:
     if not station:
         return False, 'station not selected'
+    reading = data.get_latest_reading(station)
+    reading_ts = None if not reading else reading.get('timestamp') or reading.get('observed_at')
+    parsed_reading = _parse_timestamp(str(reading_ts) if reading_ts is not None else None)
+    if parsed_reading is not None:
+        age = datetime.now(timezone.utc) - parsed_reading
+        age_seconds = int(age.total_seconds())
+        if age < timedelta(minutes=5):
+            return True, f'latest reading age {age_seconds}s'
+        if age < timedelta(minutes=15):
+            return False, f'telemetry stale degraded age {age_seconds}s'
+        return False, f'telemetry stale critical age {age_seconds}s'
+
     history = data.get_anomaly_history(station, limit=1)
     if not history:
         return False, 'no recent observations'
@@ -173,11 +191,41 @@ def _tcp_probe(host: str, port: int) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _mlflow_health_url() -> str:
+    explicit = os.getenv('DASHBOARD_MLFLOW_HEALTH_URL')
+    if explicit:
+        return explicit
+    return f'{os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000").rstrip("/")}/health'
+
+
+def _clickhouse_ping_url() -> str:
+    explicit = os.getenv('DASHBOARD_CLICKHOUSE_PING_URL')
+    if explicit:
+        return explicit
+    telemetry_url = os.getenv('TELEMETRY_URL', 'http://default:@localhost:18123/default')
+    parsed = urlparse(telemetry_url)
+    scheme = parsed.scheme or 'http'
+    host = parsed.hostname or 'localhost'
+    port = parsed.port or (8443 if scheme == 'https' else 8123)
+    return f'{scheme}://{host}:{port}/ping'
+
+
+def _mqtt_endpoint() -> tuple[str, int]:
+    host = os.getenv('MQTT_HOST') or os.getenv('DEMO_MQTT_HOST') or 'localhost'
+    port_value = os.getenv('MQTT_PORT') or os.getenv('DEMO_MQTT_PORT') or '11883'
+    try:
+        port = int(port_value)
+    except ValueError:
+        port = 11883
+    return host, port
+
+
 def _composite_state(checks: dict[str, tuple[bool, str]]) -> str:
     if all(ok for ok, _detail in checks.values()):
         return 'GREEN'
     service_down = any(not checks[name][0] for name in ('MLflow', 'Redis', 'ClickHouse', 'MQTT'))
-    return 'RED' if service_down else 'DEGRADED'
+    critical_signal = any(not ok and 'critical' in detail.lower() for ok, detail in checks.values())
+    return 'RED' if service_down or critical_signal else 'DEGRADED'
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:

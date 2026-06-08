@@ -80,3 +80,60 @@ def test_render_global_status_banner_composite_state(
     monkeypatch.setattr(data, '_last_error', None)
 
     assert widgets.render_global_status_banner('ipa_01') == expected
+
+
+def test_render_global_status_banner_reports_actionable_failed_checks(monkeypatch):
+    captions = []
+    monkeypatch.setattr(widgets.st, 'markdown', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(widgets.st, 'caption', lambda body: captions.append(body))
+    monkeypatch.setattr(
+        widgets,
+        'collect_status_checks',
+        lambda _station: {
+            'MLflow': (True, 'mlflow ok'),
+            'Redis': (True, 'redis ok'),
+            'ClickHouse': (True, 'clickhouse ok'),
+            'MQTT': (True, 'mqtt ok'),
+            'Active model': (True, 'active ok'),
+            'Telemetry': (False, 'telemetry stale degraded age 600s'),
+        },
+    )
+    monkeypatch.setattr(data, '_last_error', None)
+
+    assert widgets.render_global_status_banner('ipa_01') == 'DEGRADED'
+    assert any('Action needed: Telemetry: telemetry stale degraded age 600s' in caption for caption in captions)
+
+
+def test_composite_state_treats_critical_telemetry_as_red():
+    assert (
+        widgets._composite_state(
+            {
+                'MLflow': (True, 'mlflow ok'),
+                'Redis': (True, 'redis ok'),
+                'ClickHouse': (True, 'clickhouse ok'),
+                'MQTT': (True, 'mqtt ok'),
+                'Active model': (True, 'active ok'),
+                'Telemetry': (False, 'telemetry stale critical age 1200s'),
+            }
+        )
+        == 'RED'
+    )
+
+
+def test_service_probe_urls_are_configurable(monkeypatch):
+    monkeypatch.setenv('MLFLOW_TRACKING_URI', 'http://mlflow.local:5001')
+    monkeypatch.setenv('TELEMETRY_URL', 'http://user:pass@clickhouse.local:18124/default')
+    monkeypatch.setenv('MQTT_HOST', 'mqtt.local')
+    monkeypatch.setenv('MQTT_PORT', '11884')
+
+    assert widgets._mlflow_health_url() == 'http://mlflow.local:5001/health'
+    assert widgets._clickhouse_ping_url() == 'http://clickhouse.local:18124/ping'
+    assert widgets._mqtt_endpoint() == ('mqtt.local', 11884)
+
+
+def test_service_probe_explicit_urls_override_base_config(monkeypatch):
+    monkeypatch.setenv('DASHBOARD_MLFLOW_HEALTH_URL', 'http://mlflow-proxy/ready')
+    monkeypatch.setenv('DASHBOARD_CLICKHOUSE_PING_URL', 'http://clickhouse-proxy/ping')
+
+    assert widgets._mlflow_health_url() == 'http://mlflow-proxy/ready'
+    assert widgets._clickhouse_ping_url() == 'http://clickhouse-proxy/ping'
