@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 
@@ -214,3 +215,55 @@ def test_list_stations_parses_comma_separated_env(monkeypatch):
     monkeypatch.setenv('STATIONS', 'ipa_01, ipa_02,,ipa_03 ')
 
     assert data.list_stations() == ['ipa_01', 'ipa_02', 'ipa_03']
+
+
+def test_timestamp_age_seconds_parses_iso_timestamp():
+    now = datetime(2026, 6, 8, 0, 1, tzinfo=timezone.utc)
+
+    assert data.timestamp_age_seconds('2026-06-08T00:00:00+00:00', now=now) == 60
+    assert data.timestamp_age_seconds('not-a-timestamp', now=now) is None
+
+
+def test_get_observability_snapshot_classifies_green_state(monkeypatch):
+    now = datetime(2026, 6, 8, 0, 1, tzinfo=timezone.utc)
+    fake = FakeRedis(
+        {
+            'pumpad:latest:reading:ipa_01': json.dumps({'station': 'ipa_01', 'timestamp': '2026-06-08T00:00:30+00:00'}),
+            'pumpad:latest:anomaly:ipa_01': json.dumps({'station': 'ipa_01', 'score': 0.1, 'source_timestamp': '2026-06-08T00:00:30+00:00'}),
+            'pumpad:drift:result': json.dumps({'dataset_drift': False, 'timestamp': '2026-06-08T00:00:00+00:00'}),
+            'pumpad:retrain:result': json.dumps({'success': True, 'version': '2'}),
+            'pumpad:active:model': json.dumps({'name': 'PumpAD', 'version': '2', 'activated_at': '2026-06-08T00:00:00+00:00'}),
+        }
+    )
+    monkeypatch.setattr(data, '_redis_client', lambda: fake)
+
+    snapshot = data.get_observability_snapshot('ipa_01', now=now)
+
+    assert snapshot['state'] == 'GREEN'
+    assert snapshot['components'] == {'telemetry': 'GREEN', 'drift_report': 'GREEN', 'active_model': 'GREEN'}
+    assert snapshot['telemetry_age_seconds'] == 30
+    assert snapshot['drift_report_age_seconds'] == 60
+    assert snapshot['active_model_age_seconds'] == 60
+    assert snapshot['retrain_result'] == 'SUCCESS'
+
+
+def test_get_observability_snapshot_flags_stale_and_drift(monkeypatch):
+    now = datetime(2026, 6, 8, 0, 10, tzinfo=timezone.utc)
+    fake = FakeRedis(
+        {
+            'pumpad:latest:reading:ipa_01': json.dumps({'station': 'ipa_01', 'timestamp': '2026-06-08T00:00:00+00:00'}),
+            'pumpad:drift:result': json.dumps({'dataset_drift': True, 'timestamp': '2026-06-08T00:00:00+00:00'}),
+            'pumpad:retrain:result': json.dumps({'promoted': False, 'reason': 'guardrail'}),
+            'pumpad:active:model': json.dumps({'name': 'PumpAD', 'version': '2', 'activated_at': '2026-06-02T00:00:00+00:00'}),
+        }
+    )
+    monkeypatch.setattr(data, '_redis_client', lambda: fake)
+
+    snapshot = data.get_observability_snapshot('ipa_01', now=now)
+
+    assert snapshot['state'] == 'RED'
+    assert snapshot['components']['telemetry'] == 'RED'
+    assert snapshot['components']['drift_report'] == 'RED'
+    assert snapshot['components']['active_model'] == 'DEGRADED'
+    assert snapshot['drift_detected'] is True
+    assert snapshot['retrain_result'] == 'REJECTED'

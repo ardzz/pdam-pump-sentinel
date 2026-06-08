@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
@@ -131,6 +132,51 @@ def get_last_error() -> str | None:
     return _last_error
 
 
+def timestamp_age_seconds(value: Any, now: datetime | None = None) -> float | None:
+    parsed = _parse_timestamp(value)
+    if parsed is None:
+        return None
+    reference = now or datetime.now(timezone.utc)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return max(0.0, (reference.astimezone(timezone.utc) - parsed).total_seconds())
+
+
+def get_observability_snapshot(station: str, now: datetime | None = None) -> dict[str, Any]:
+    reading = get_latest_reading(station)
+    anomaly = get_latest_anomaly(station)
+    drift = get_drift_result()
+    retrain = get_retrain_result()
+    active_model = get_active_model()
+
+    telemetry_ts = _first_value(reading, 'timestamp', 'observed_at') or _first_value(anomaly, 'source_timestamp', 'timestamp')
+    drift_ts = _first_value(drift, 'timestamp', 'finished_at', 'created_at')
+    active_ts = _first_value(active_model, 'activated_at', 'activated_ts', 'updated_at')
+
+    telemetry_age = timestamp_age_seconds(telemetry_ts, now=now)
+    drift_age = timestamp_age_seconds(drift_ts, now=now)
+    active_model_age = timestamp_age_seconds(active_ts, now=now)
+    drift_detected = _drift_detected(drift)
+
+    component_states = {
+        'telemetry': _age_state(telemetry_age, green_seconds=60, red_seconds=300),
+        'drift_report': 'RED' if drift_detected else _age_state(drift_age, green_seconds=3600, red_seconds=86400),
+        'active_model': _age_state(active_model_age, green_seconds=24 * 3600, red_seconds=7 * 24 * 3600),
+    }
+    return {
+        'state': _worst_state(component_states.values()),
+        'components': component_states,
+        'telemetry_age_seconds': telemetry_age,
+        'drift_report_age_seconds': drift_age,
+        'active_model_age_seconds': active_model_age,
+        'drift_detected': drift_detected,
+        'retrain_result': _retrain_result(retrain),
+        'latest_reading_timestamp': telemetry_ts,
+        'latest_drift_timestamp': drift_ts,
+        'active_model_timestamp': active_ts,
+    }
+
+
 def record_operator_action(kind: str, station: str, payload: dict[str, Any], ttl_seconds: int | None) -> bool:
     global _last_error
 
@@ -186,6 +232,68 @@ def _operator_action_key(kind: str, station: str, payload: dict[str, Any]) -> st
     return f'pumpad:anomaly:{normalized_kind}:{station}:{raw_ts}'
 
 
+def _first_value(payload: dict[str, Any] | None, *keys: str) -> Any:
+    if not payload:
+        return None
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, ''):
+            return value
+    return None
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _age_state(age_seconds: float | None, *, green_seconds: int, red_seconds: int) -> str:
+    if age_seconds is None:
+        return 'RED'
+    if age_seconds <= green_seconds:
+        return 'GREEN'
+    if age_seconds <= red_seconds:
+        return 'DEGRADED'
+    return 'RED'
+
+
+def _worst_state(states: Iterable[str]) -> str:
+    values = tuple(states)
+    if 'RED' in values:
+        return 'RED'
+    if 'DEGRADED' in values:
+        return 'DEGRADED'
+    return 'GREEN'
+
+
+def _drift_detected(drift: dict[str, Any] | None) -> bool:
+    if not drift:
+        return False
+    metrics = drift.get('metrics', {}) if isinstance(drift.get('metrics'), dict) else {}
+    return bool(drift.get('dataset_drift', metrics.get('drift_detected', False)))
+
+
+def _retrain_result(retrain: dict[str, Any] | None) -> str:
+    if not retrain:
+        return 'N/A'
+    if retrain.get('promoted') is True:
+        return 'PROMOTED'
+    if retrain.get('success') is False or retrain.get('error'):
+        return 'FAILED'
+    if retrain.get('success') is True:
+        return 'SUCCESS'
+    if retrain.get('promoted') is False:
+        return 'REJECTED'
+    return 'N/A'
+
+
 def _query_result_dicts(result: Any) -> list[dict[str, Any]]:
     named_results = getattr(result, 'named_results', None)
     if callable(named_results):
@@ -225,7 +333,9 @@ __all__ = [
     'get_latest_anomaly',
     'get_latest_reading',
     'get_model_versions',
+    'get_observability_snapshot',
     'get_retrain_result',
     'list_stations',
     'record_operator_action',
+    'timestamp_age_seconds',
 ]
