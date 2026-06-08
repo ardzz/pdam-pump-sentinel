@@ -37,6 +37,27 @@ def test_prometheus_scrapes_routemq_app_metrics_endpoint():
     assert job['static_configs'][0]['targets'] == ['app:8080']
 
 
+def test_prometheus_loads_local_pumpad_alert_rules():
+    config = _load_yaml('infra/prometheus/prometheus.yml')
+    rules = _load_yaml('infra/prometheus/rules/pumpad-alerts.yml')
+    alerts = {
+        rule['alert']
+        for group in rules['groups']
+        for rule in group['rules']
+        if 'alert' in rule
+    }
+
+    assert '/etc/prometheus/rules/*.yml' in config['rule_files']
+    assert alerts >= {
+        'PDAMAppMetricsDown',
+        'PDAMTelemetryStale',
+        'PDAMInferenceErrors',
+        'PDAMPersistenceWriteErrors',
+        'PDAMDriftReportStale',
+        'PDAMActiveModelStale',
+    }
+
+
 def test_prometheus_scrapes_mosquitto_exporter():
     config = _load_yaml('infra/prometheus/prometheus.yml')
 
@@ -75,9 +96,13 @@ def test_grafana_dashboard_loads_and_uses_routemq_metrics():
     ]
 
     assert dashboard['uid'] == 'pumpad-observability'
-    assert any('routemq_mqtt_messages_received_total' in expression for expression in expressions)
+    assert any('routemq_router_dispatch_started_total' in expression for expression in expressions)
+    assert any('routemq_router_dispatch_succeeded_total' in expression for expression in expressions)
     assert any('routemq_telemetry_points_accepted_total' in expression for expression in expressions)
     assert any('routemq_telemetry_queue_depth' in expression for expression in expressions)
+    assert any('pumpad_inference_events_total' in expression for expression in expressions)
+    assert any('pumpad_persistence_writes_total' in expression for expression in expressions)
+    assert not any('_total_total' in expression for expression in expressions)
 
 
 def test_grafana_mlops_dashboard_references_new_metrics():
@@ -87,6 +112,31 @@ def test_grafana_mlops_dashboard_references_new_metrics():
     assert any('pumpad_model_info' in query for query in queries)
     assert any('pumpad_inference_latency_seconds' in query for query in queries)
     assert any('pumpad_drift_share' in query for query in queries)
+    assert any('pumpad_drift_detected' in query for query in queries)
+    assert any('pumpad_anomaly_score' in query for query in queries)
+    assert any('pumpad_retraining_jobs_total' in query for query in queries)
+    assert any('pumpad_inference_events_total' in query for query in queries)
+    assert any('pumpad_anomaly_events_total' in query for query in queries)
+    assert any('pumpad_drift_report_age_seconds' in query for query in queries)
+    assert any('pumpad_retrain_duration_seconds' in query for query in queries)
+    assert any('pumpad_active_model_age_seconds' in query for query in queries)
+
+
+def test_grafana_system_health_dashboard_references_slo_metrics():
+    dashboard = _load_dashboard('pumpad-system-health.json')
+    queries = _dashboard_queries(dashboard)
+
+    assert dashboard['uid'] == 'pumpad-system-health'
+    assert any('up{job="routemq-app"}' in query for query in queries)
+    assert any('pumpad_telemetry_freshness_seconds' in query for query in queries)
+    assert any('pumpad_persistence_writes_total' in query for query in queries)
+    assert any('pumpad_active_model_age_seconds' in query for query in queries)
+
+
+def test_grafana_dashboards_do_not_use_fake_placeholder_expressions():
+    for dashboard_name in ('pumpad.json', 'pumpad-mlops.json', 'pumpad-system-health.json'):
+        queries = _dashboard_queries(_load_dashboard(dashboard_name))
+        assert not any('0 * sum' in query for query in queries), dashboard_name
 
 
 def test_grafana_dashboards_have_annotation_queries():
@@ -131,6 +181,7 @@ def test_compose_defines_prometheus_and_grafana_services():
 
     assert services['prometheus']['image'].startswith('prom/prometheus')
     assert './prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro' in services['prometheus']['volumes']
+    assert './prometheus/rules:/etc/prometheus/rules:ro' in services['prometheus']['volumes']
     assert services['grafana']['image'].startswith('grafana/grafana')
     assert services['grafana']['environment']['GF_INSTALL_PLUGINS'] == 'grafana-clickhouse-datasource'
     assert './grafana/provisioning:/etc/grafana/provisioning:ro' in services['grafana']['volumes']

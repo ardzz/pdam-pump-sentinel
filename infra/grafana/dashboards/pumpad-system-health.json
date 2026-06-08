@@ -641,6 +641,219 @@
       ],
       "title": "Telemetry freshness by station",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "description": "Persistence, model freshness, and service-level SLO evidence for the portfolio demo.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 10,
+      "panels": [],
+      "title": "SLO and dependency health",
+      "type": "row"
+    },
+    {
+      "description": "Dependency triage: Redis failures appear as persistence write errors with target=redis; ClickHouse failures use target=clickhouse; MLflow health is checked through retraining/model metadata; MQTT health is checked through the broker exporter and RouteMQ dispatch panels.",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 11,
+      "options": {
+        "content": "### Dependency status text\n- **Redis:** watch `pumpad_persistence_writes_total{target=\"redis\",result=\"error\"}` and latest-reading freshness.\n- **ClickHouse:** watch `pumpad_persistence_writes_total{target=\"clickhouse\",result=\"error\"}` and telemetry history panels.\n- **MLflow/model:** watch `pumpad_model_info` and `pumpad_active_model_age_seconds`.\n- **MQTT:** watch the Mosquitto exporter and RouteMQ dispatch lifecycle.",
+        "mode": "markdown"
+      },
+      "title": "Redis / ClickHouse / MLflow / MQTT status guide",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Write error rate for Redis and ClickHouse persistence paths. Any sustained non-zero value is actionable.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (target) (rate(pumpad_persistence_writes_total{result=\"error\"}[5m]))",
+          "legendFormat": "{{target}} errors",
+          "refId": "A"
+        }
+      ],
+      "title": "Persistence write errors",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Successful Redis and ClickHouse write flow, grouped by persistence target.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "writes/s"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (target, result) (rate(pumpad_persistence_writes_total[5m]))",
+          "legendFormat": "{{target}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Persistence write flow",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Active champion metadata age. Yellow/red states indicate stale model evidence for the operator demo.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 604800
+              },
+              {
+                "color": "red",
+                "value": 1209600
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      },
+      "id": 14,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (name, version, alias) (pumpad_active_model_age_seconds)",
+          "legendFormat": "{{name}} {{version}} {{alias}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Active model freshness",
+      "type": "stat"
     }
   ],
   "refresh": "10s",
