@@ -1,0 +1,56 @@
+groups:
+  - name: pumpad-local-observability
+    rules:
+      - alert: PDAMAppMetricsDown
+        expr: up{job="routemq-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: RouteMQ app metrics endpoint is down
+          description: Prometheus cannot scrape app:8080/metrics.
+
+      - alert: PDAMTelemetryStale
+        expr: max(pumpad_telemetry_freshness_seconds) > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pump telemetry is stale
+          description: Latest accepted station telemetry is older than five minutes.
+
+      - alert: PDAMInferenceErrors
+        expr: sum(rate(pumpad_inference_events_total{result="error"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: PumpAD inference errors detected
+          description: The anomaly controller is recording failed inference events.
+
+      - alert: PDAMPersistenceWriteErrors
+        expr: sum(rate(pumpad_persistence_writes_total{result="error"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: PumpAD persistence writes are failing
+          description: Redis or ClickHouse persistence write errors were recorded.
+
+      - alert: PDAMDriftReportStale
+        expr: pumpad_drift_report_age_seconds > 86400
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: PumpAD drift report is stale
+          description: Latest drift report evidence is older than one day.
+
+      - alert: PDAMActiveModelStale
+        expr: max(pumpad_active_model_age_seconds) > 604800
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: PumpAD active model metadata is stale
+          description: Active champion metadata has not been refreshed for seven days.
