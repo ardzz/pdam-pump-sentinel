@@ -124,3 +124,35 @@ def test_metrics_health_server_does_not_start_when_disabled(monkeypatch):
     finally:
         application._stop_health_servers()
         application.loop.close()
+
+
+def test_metrics_renderer_normalizes_routemq_counter_names_and_appends_pumpad_metrics(monkeypatch):
+    application = _application()
+
+    def fake_render_metrics(registry, content_type, static_labels):
+        return b'\n'.join(
+            [
+                b'# HELP routemq_telemetry_points_accepted_total_total Telemetry points accepted.',
+                b'# TYPE routemq_telemetry_points_accepted_total_total counter',
+                b'routemq_telemetry_points_accepted_total_total{service="pdam-pump-sentinel"} 14',
+                b'',
+            ]
+        )
+
+    monkeypatch.setattr(bootstrap_app, 'render_metrics', fake_render_metrics)
+    monkeypatch.setattr(
+        bootstrap_app,
+        'render_prometheus_client_metrics',
+        lambda: b'pumpad_model_info{name="PumpAD",version="6",alias="champion",model_dir="",run_id=""} 1\n',
+    )
+
+    try:
+        renderer = application._build_metrics_renderer(bootstrap_app.MetricsHttpSettings(enabled=True), bootstrap_app.MetricsRegistry())
+        _content_type, payload = renderer(None)
+    finally:
+        application.loop.close()
+
+    text = payload.decode('utf-8')
+    assert 'routemq_telemetry_points_accepted_total_total' not in text
+    assert 'routemq_telemetry_points_accepted_total{service="pdam-pump-sentinel"} 14' in text
+    assert 'pumpad_model_info{name="PumpAD",version="6",alias="champion",model_dir="",run_id=""} 1' in text

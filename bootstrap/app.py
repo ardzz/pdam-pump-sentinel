@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -38,7 +39,11 @@ from routemq.telemetry import telemetry  # type: ignore[reportMissingImports]
 from routemq.tsdb.telemetry_adapters import adapter_from_settings  # type: ignore[reportMissingImports]
 from routemq.worker_manager import WorkerManager  # type: ignore[reportMissingImports]
 
+from app.observability.metrics import render_prometheus_client_metrics
 from ml.monitoring.scheduler import DriftScheduler, RetrainScheduler
+
+_DUPLICATE_TOTAL_COMMENT_RE = re.compile(rb'(?m)^(# (?:HELP|TYPE) [A-Za-z_:][A-Za-z0-9_:]*)_total_total(?=\s)')
+_DUPLICATE_TOTAL_SAMPLE_RE = re.compile(rb'(?m)^([A-Za-z_:][A-Za-z0-9_:]*)_total_total(?=[{\s])')
 
 
 class Application:
@@ -154,7 +159,13 @@ class Application:
 
         def render(accept: str | None) -> tuple[str, bytes]:
             content_type = negotiate_content_type(accept)
-            return content_type, render_metrics(registry, content_type=content_type, static_labels=default_labels)
+            routemq_payload = _normalize_duplicate_total_suffixes(
+                render_metrics(registry, content_type=content_type, static_labels=default_labels)
+            )
+            app_payload = render_prometheus_client_metrics()
+            if not app_payload:
+                return content_type, routemq_payload
+            return content_type, _join_metrics_payloads(routemq_payload, app_payload)
 
         return render
 
@@ -236,6 +247,31 @@ def main() -> None:
     from routemq.cli import main as routemq_main  # type: ignore[reportMissingImports]
 
     routemq_main()
+
+
+def _normalize_duplicate_total_suffixes(payload: bytes) -> bytes:
+    payload = _DUPLICATE_TOTAL_COMMENT_RE.sub(rb'\1_total', payload)
+    return _DUPLICATE_TOTAL_SAMPLE_RE.sub(rb'\1_total', payload)
+
+
+def _join_metrics_payloads(*payloads: bytes) -> bytes:
+    chunks = []
+    has_openmetrics_eof = False
+    for payload in payloads:
+        if not payload or not payload.strip():
+            continue
+        chunk = payload.rstrip()
+        if chunk.endswith(b'# EOF'):
+            has_openmetrics_eof = True
+            chunk = chunk[: -len(b'# EOF')].rstrip()
+        if chunk:
+            chunks.append(chunk)
+    if not chunks:
+        return b''
+    joined = b'\n'.join(chunks) + b'\n'
+    if has_openmetrics_eof:
+        joined += b'# EOF\n'
+    return joined
 
 
 if __name__ == '__main__':
