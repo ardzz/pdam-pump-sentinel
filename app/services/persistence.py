@@ -14,6 +14,7 @@ from routemq.tsdb.telemetry_adapters import (  # type: ignore[reportMissingImpor
     ClickHouseTelemetryAdapter,
 )
 
+from app.models.operator_label import OPERATOR_LABEL_COLUMNS, OperatorLabelPayload
 from app.observability.metrics import PERSISTENCE_WRITES
 
 logger = logging.getLogger('PDAM.persistence')
@@ -21,6 +22,7 @@ logger = logging.getLogger('PDAM.persistence')
 LATEST_READING_KEY = 'pumpad:latest:reading:{station}'
 LATEST_ANOMALY_KEY = 'pumpad:latest:anomaly:{station}'
 ANOMALY_SCORE_MEASUREMENT = 'anomaly_score'
+OPERATOR_LABELS_TABLE = 'operator_labels'
 
 
 async def persist_telemetry(
@@ -30,6 +32,39 @@ async def persist_telemetry(
 ) -> None:
     await _persist_latest(station, reading_payload, anomaly_payload)
     await _persist_history(station, reading_payload, anomaly_payload)
+
+
+async def persist_operator_label(station: str, label_payload: OperatorLabelPayload) -> None:
+    adapter = telemetry.adapter
+    if not isinstance(adapter, ClickHouseTelemetryAdapter):
+        return
+    try:
+        if adapter._client is None:
+            await adapter.connect()
+        client = adapter._client
+        if client is None:
+            raise RuntimeError('ClickHouse telemetry adapter did not initialize a client')
+        now = datetime.now(UTC)
+        row = {
+            'station': station,
+            'source_timestamp': label_payload.source_timestamp,
+            'label': label_payload.label,
+            'label_source': label_payload.label_source,
+            'operator_id': label_payload.operator_id,
+            'reason': label_payload.reason,
+            'created_at': now,
+            'updated_at': now,
+        }
+        await client.insert(
+            OPERATOR_LABELS_TABLE,
+            [tuple(row[column] for column in OPERATOR_LABEL_COLUMNS)],
+            column_names=list(OPERATOR_LABEL_COLUMNS),
+        )
+        PERSISTENCE_WRITES.labels(target='clickhouse', result='success').inc()
+    except Exception:
+        PERSISTENCE_WRITES.labels(target='clickhouse', result='error').inc()
+        logger.exception('failed to persist operator label to ClickHouse', extra={'station': station})
+        raise
 
 
 async def _persist_latest(
@@ -99,6 +134,9 @@ async def _persist_anomaly_score_row(
         return
     if adapter._client is None:
         await adapter.connect()
+    client = adapter._client
+    if client is None:
+        raise RuntimeError('ClickHouse telemetry adapter did not initialize a client')
     anomaly = anomaly_payload.get('anomaly')
     now = datetime.now(UTC)
     row = {
@@ -116,7 +154,7 @@ async def _persist_anomaly_score_row(
         'attributes': dict(attributes),
         'metadata': {},
     }
-    await adapter._client.insert(
+    await client.insert(
         adapter.table,
         [tuple(row.get(column) for column in CLICKHOUSE_TELEMETRY_COLUMNS)],
         column_names=list(CLICKHOUSE_TELEMETRY_COLUMNS),
