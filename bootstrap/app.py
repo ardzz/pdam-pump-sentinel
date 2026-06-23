@@ -40,7 +40,7 @@ from routemq.tsdb.telemetry_adapters import adapter_from_settings  # type: ignor
 from routemq.worker_manager import WorkerManager  # type: ignore[reportMissingImports]
 
 from app.observability.metrics import render_prometheus_client_metrics
-from ml.monitoring.scheduler import DriftScheduler, RetrainScheduler
+from ml.monitoring.scheduler import DriftScheduler, ModelRefreshScheduler, RetrainScheduler
 
 _DUPLICATE_TOTAL_COMMENT_RE = re.compile(rb'(?m)^(# (?:HELP|TYPE) [A-Za-z_:][A-Za-z0-9_:]*)_total_total(?=\s)')
 _DUPLICATE_TOTAL_SAMPLE_RE = re.compile(rb'(?m)^([A-Za-z_:][A-Za-z0-9_:]*)_total_total(?=[{\s])')
@@ -68,6 +68,7 @@ class Application:
         self._telemetry_started = False
         self._retrain_scheduler = RetrainScheduler()
         self._drift_scheduler = DriftScheduler()
+        self._model_refresh_scheduler = ModelRefreshScheduler()
         self.health_status = HealthStatus()
         self.health_server: HealthServer | None = None
         self.metrics_health_server: HealthServer | None = None
@@ -199,6 +200,8 @@ class Application:
                 self._retrain_scheduler.start(self.loop)
             if os.getenv('ENABLE_DRIFT_SCHEDULER', 'false').lower() == 'true':
                 self._drift_scheduler.start(self.loop)
+            if os.getenv('ENABLE_MODEL_REFRESH_SCHEDULER', 'false').lower() == 'true':
+                self._model_refresh_scheduler.start(self.loop)
             self.health_status.startup_complete = True
             self.logger.info('Application started. Press Ctrl+C to exit.')
             self.loop.run_forever()
@@ -209,6 +212,7 @@ class Application:
             self.worker_manager.stop_workers()
             self._retrain_scheduler.shutdown()
             self._drift_scheduler.shutdown()
+            self._model_refresh_scheduler.shutdown()
             self.loop.run_until_complete(self._cleanup_connections())
             self._stop_health_servers()
             client.loop_stop()

@@ -10,6 +10,50 @@ def _application() -> Application:
     return Application(router=Router(), show_banner=False, log_to_console=False)
 
 
+class FakeClient:
+    def __init__(self):
+        self.loop_started = False
+        self.loop_stopped = False
+        self.disconnected = False
+
+    def loop_start(self):
+        self.loop_started = True
+
+    def loop_stop(self):
+        self.loop_stopped = True
+
+    def disconnect(self):
+        self.disconnected = True
+
+
+class FakeLoop:
+    def __init__(self):
+        self.closed = False
+        self.run_forever_calls = 0
+
+    def run_until_complete(self, coro):
+        return bootstrap_app.asyncio.run(coro)
+
+    def run_forever(self):
+        self.run_forever_calls += 1
+        raise KeyboardInterrupt
+
+    def close(self):
+        self.closed = True
+
+
+class FakeLifecycleScheduler:
+    def __init__(self):
+        self.started_with = []
+        self.shutdown_calls = 0
+
+    def start(self, loop):
+        self.started_with.append(loop)
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+
+
 async def test_initialize_connections_skips_redis_when_disabled(monkeypatch):
     calls = []
 
@@ -156,3 +200,90 @@ def test_metrics_renderer_normalizes_routemq_counter_names_and_appends_pumpad_me
     assert 'routemq_telemetry_points_accepted_total_total' not in text
     assert 'routemq_telemetry_points_accepted_total{service="pdam-pump-sentinel"} 14' in text
     assert 'pumpad_model_info{name="PumpAD",version="6",alias="champion",model_dir="",run_id=""} 1' in text
+
+
+def test_model_refresh_scheduler_disabled_by_default(monkeypatch):
+    application = _application()
+    original_loop = application.loop
+    fake_client = FakeClient()
+    fake_loop = FakeLoop()
+    retrain_scheduler = FakeLifecycleScheduler()
+    drift_scheduler = FakeLifecycleScheduler()
+    model_refresh_scheduler = FakeLifecycleScheduler()
+    worker_calls = []
+    health_calls = []
+    cleanup_calls = []
+
+    async def fake_initialize_connections():
+        return None
+
+    async def fake_cleanup_connections():
+        cleanup_calls.append(True)
+
+    monkeypatch.delenv('ENABLE_RETRAIN_SCHEDULER', raising=False)
+    monkeypatch.delenv('ENABLE_DRIFT_SCHEDULER', raising=False)
+    monkeypatch.delenv('ENABLE_MODEL_REFRESH_SCHEDULER', raising=False)
+    monkeypatch.setattr(application, 'client', fake_client)
+    monkeypatch.setattr(application, 'loop', fake_loop)
+    monkeypatch.setattr(application, '_retrain_scheduler', retrain_scheduler)
+    monkeypatch.setattr(application, '_drift_scheduler', drift_scheduler)
+    monkeypatch.setattr(application, '_model_refresh_scheduler', model_refresh_scheduler)
+    monkeypatch.setattr(application.worker_manager, 'start_workers', lambda: worker_calls.append('start'))
+    monkeypatch.setattr(application.worker_manager, 'stop_workers', lambda: worker_calls.append('stop'))
+    monkeypatch.setattr(application, '_start_health_servers', lambda: health_calls.append('start'))
+    monkeypatch.setattr(application, '_stop_health_servers', lambda: health_calls.append('stop'))
+    monkeypatch.setattr(application, '_initialize_connections', fake_initialize_connections)
+    monkeypatch.setattr(application, '_cleanup_connections', fake_cleanup_connections)
+
+    try:
+        application.run()
+    finally:
+        original_loop.close()
+
+    assert retrain_scheduler.started_with == []
+    assert drift_scheduler.started_with == []
+    assert model_refresh_scheduler.started_with == []
+    assert model_refresh_scheduler.shutdown_calls == 1
+    assert worker_calls == ['start', 'stop']
+    assert health_calls == ['start', 'stop']
+    assert cleanup_calls == [True]
+    assert fake_client.loop_started is True
+    assert fake_client.loop_stopped is True
+    assert fake_client.disconnected is True
+    assert fake_loop.run_forever_calls == 1
+    assert fake_loop.closed is True
+
+
+def test_model_refresh_scheduler_enabled_starts_and_shuts_down(monkeypatch):
+    application = _application()
+    original_loop = application.loop
+    fake_client = FakeClient()
+    fake_loop = FakeLoop()
+    model_refresh_scheduler = FakeLifecycleScheduler()
+
+    async def fake_initialize_connections():
+        return None
+
+    async def fake_cleanup_connections():
+        return None
+
+    monkeypatch.delenv('ENABLE_RETRAIN_SCHEDULER', raising=False)
+    monkeypatch.delenv('ENABLE_DRIFT_SCHEDULER', raising=False)
+    monkeypatch.setenv('ENABLE_MODEL_REFRESH_SCHEDULER', 'true')
+    monkeypatch.setattr(application, 'client', fake_client)
+    monkeypatch.setattr(application, 'loop', fake_loop)
+    monkeypatch.setattr(application, '_model_refresh_scheduler', model_refresh_scheduler)
+    monkeypatch.setattr(application.worker_manager, 'start_workers', lambda: None)
+    monkeypatch.setattr(application.worker_manager, 'stop_workers', lambda: None)
+    monkeypatch.setattr(application, '_start_health_servers', lambda: None)
+    monkeypatch.setattr(application, '_stop_health_servers', lambda: None)
+    monkeypatch.setattr(application, '_initialize_connections', fake_initialize_connections)
+    monkeypatch.setattr(application, '_cleanup_connections', fake_cleanup_connections)
+
+    try:
+        application.run()
+    finally:
+        original_loop.close()
+
+    assert model_refresh_scheduler.started_with == [fake_loop]
+    assert model_refresh_scheduler.shutdown_calls == 1
