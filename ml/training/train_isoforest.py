@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, replace
 from importlib import import_module
@@ -526,12 +527,11 @@ def _log_skab_inputs_to_active_run(
 
 
 def _active_mlflow_run_exists() -> bool:
-    try:
-        mlflow = import_module('mlflow')
-        active_run = getattr(mlflow, 'active_run', None)
-        return bool(active_run()) if callable(active_run) else False
-    except Exception:
+    mlflow = sys.modules.get('mlflow')
+    if mlflow is None:
         return False
+    active_run = getattr(mlflow, 'active_run', None)
+    return bool(active_run()) if callable(active_run) else False
 
 
 def _input_example(features: np.ndarray) -> np.ndarray | None:
