@@ -113,6 +113,8 @@ pdam-pump-sentinel/
 └── docs/           # Design, proposal, ADR, presentation
 ```
 
+Generated/runtime outputs stay outside git by default. The only retained generated evidence under `artifacts/` is `artifacts/skab-model-experiments/summary.md` and `summary.csv`; curated report and presentation images live under `docs/laporan/assets/` and `docs/presentation/screenshots/`.
+
 ## Tim
 
 | Role | Tanggung Jawab |
