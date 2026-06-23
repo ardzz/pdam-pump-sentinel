@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 TELEMETRY_TOPIC_PATTERN = 'factory/skab/{station}/telemetry'
+LABEL_TOPIC_PATTERN = 'factory/skab/{station}/label'
 
 
 class FakePahoClient:
@@ -48,3 +49,16 @@ async def test_routemq_handler_receives_path_params_payload_and_paho_client_for_
             'qos': 1,
         }
     ]
+
+
+def test_repository_router_registers_telemetry_and_label_routes():
+    telemetry_router = import_module('app.routers.telemetry').router
+
+    routes = {route.topic: route for route in telemetry_router.routes}
+
+    assert TELEMETRY_TOPIC_PATTERN in routes
+    assert LABEL_TOPIC_PATTERN in routes
+    assert routes[TELEMETRY_TOPIC_PATTERN].qos == 1
+    assert routes[LABEL_TOPIC_PATTERN].qos == 1
+    assert routes[TELEMETRY_TOPIC_PATTERN].handler.__name__ == 'ingest'
+    assert routes[LABEL_TOPIC_PATTERN].handler.__name__ == 'ingest'

@@ -2,8 +2,10 @@ import json
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from app.controllers.anomaly_controller import Controller
+from app.controllers.label_controller import LabelController
 from app.observability.metrics import ANOMALY_EVENTS, INFERENCE_EVENTS
 from app.services.inference import reset_inference_service, set_inference_service
 from ml.inference.pca_inference import PcaAnomalyInferenceService
@@ -124,3 +126,58 @@ async def test_controller_falls_back_to_demo_without_model():
         assert body == {'station': 'ipa_01', 'anomaly': 1, 'source_timestamp': 't0'}
     finally:
         reset_inference_service()
+
+
+async def test_label_controller_persists_valid_label_and_returns_deterministic_response(monkeypatch):
+    persisted = []
+
+    async def fake_persist(station, label_payload):
+        persisted.append({'station': station, 'label_payload': label_payload})
+
+    monkeypatch.setattr('app.controllers.label_controller.persist_operator_label', fake_persist, raising=True)
+
+    result = await LabelController.ingest(
+        station='ipa_01',
+        payload={
+            'source_timestamp': '2024-01-01T00:00:00Z',
+            'label': True,
+            'operator_id': 'operator-a',
+            'reason': 'visual confirmation',
+        },
+        client=FakePahoClient(),
+    )
+
+    assert result == {'accepted': True, 'station': 'ipa_01', 'label': 1}
+    assert len(persisted) == 1
+    assert persisted[0]['station'] == 'ipa_01'
+    label_payload = persisted[0]['label_payload']
+    assert label_payload.source_timestamp == '2024-01-01T00:00:00Z'
+    assert label_payload.label == 1
+    assert label_payload.label_source == 'operator'
+    assert label_payload.operator_id == 'operator-a'
+    assert label_payload.reason == 'visual confirmation'
+
+
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'label': 1},
+        {'source_timestamp': 't0'},
+        {'source_timestamp': 't0', 'label': 2},
+        {'source_timestamp': 't0', 'label': '1'},
+        {'source_timestamp': 't0', 'label': 1, 'label_source': ''},
+        {'source_timestamp': 't0', 'label': 1, 'operator_id': 7},
+    ],
+)
+async def test_label_controller_rejects_invalid_payload_before_persistence(monkeypatch, payload):
+    persisted = []
+
+    async def fake_persist(station, label_payload):
+        persisted.append({'station': station, 'label_payload': label_payload})
+
+    monkeypatch.setattr('app.controllers.label_controller.persist_operator_label', fake_persist, raising=True)
+
+    with pytest.raises(ValueError):
+        await LabelController.ingest(station='ipa_01', payload=payload, client=FakePahoClient())
+
+    assert persisted == []
