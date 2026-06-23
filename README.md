@@ -96,7 +96,7 @@ Notebook EDA dan persiapan data SKAB: [`notebooks/skab_eda_and_data_prep.ipynb`]
 - Scheduler retraining dan drift ada di balik env flag `ENABLE_DRIFT_SCHEDULER` dan `DRIFT_INTERVAL_MINUTES`, serta tidak aktif secara default pada compose.
 - Scheduled retraining saat ini PCA-only dan berbasis path SKAB, bukan rolling-window dari ClickHouse, belum melatih LSTM-AE atau supervised secara otomatis.
 - Hot-swap model bersifat process-local. Belum ada runtime polling alias MLflow, hanya cold-start load champion.
-- Live PCA inference melayani fitur raw saja. Mode spectral/enriched masih untuk offline-eval.
+- Live PCA inference mendukung fitur raw dan spectral. Mode enriched masih untuk offline-eval.
 - Sebagian halaman dashboard refresh manual: `live_sensors` 5 detik, `system_health` 10 detik, halaman lain memakai cache TTL.
 
 ## Struktur Project
