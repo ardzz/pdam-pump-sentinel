@@ -392,94 +392,77 @@ Pattern reference: [Evidently mlflow_integration.ipynb](https://github.com/evide
 pdam-pump-sentinel/
 ├── README.md
 ├── docs/
-│   ├── proposal.md                    # 8 bagian sesuai rubrik
-│   ├── architecture.md
-│   ├── demo-script.md
 │   ├── adr/
-│   │   ├── 0001-routemq-as-mqtt-framework.md
-│   │   ├── 0002-pca-lstm-ae-algorithm-choice.md
-│   │   ├── 0003-mlflow-aliases-champion-challenger.md
-│   │   └── 0004-scheduled-vs-trigger-retraining.md
-│   └── presentation/
-│       └── slides.pdf
+│   ├── laporan/
+│   │   └── assets/                    # curated final report screenshots
+│   ├── plans/
+│   ├── presentation/
+│   │   └── screenshots/               # curated presentation evidence
+│   └── research/
 │
 ├── app/
 │   ├── routers/
-│   │   ├── pump_sensors.py
-│   │   └── mlops_events.py
+│   │   └── telemetry.py
 │   ├── controllers/
-│   │   ├── sensor_controller.py
-│   │   └── mlops_event_controller.py
-│   ├── middleware/
-│   │   ├── rate_limit.py
-│   │   ├── validate_payload.py
-│   │   └── correlation.py
+│   │   ├── anomaly_controller.py
+│   │   └── label_controller.py
+│   ├── middleware.py
 │   ├── models/
-│   │   ├── sensor_reading.py
 │   │   ├── anomaly_event.py
-│   │   └── retraining_log.py
+│   │   └── operator_label.py
+│   ├── observability/
+│   ├── services/
 │   └── jobs/
-│       ├── anomaly_detection_job.py
 │       ├── retraining_job.py
 │       └── drift_report_job.py
 │
 ├── ml/
-│   ├── training/
-│   │   ├── train_pca.py
-│   │   ├── train_lstm_ae.py
-│   │   └── evaluate.py
+│   ├── datasets/
+│   ├── evaluation/
 │   ├── features/
-│   │   ├── window_builder.py
-│   │   └── normalizer.py
+│   ├── inference/
 │   ├── monitoring/
-│   │   ├── drift_check.py
-│   │   └── champion_challenger.py
 │   ├── registry/
-│   │   └── mlflow_client.py
-│   └── datasets/
-│       ├── skab_loader.py
-│       └── synthetic_drift.py
+│   ├── training/
+│   └── utils/
 │
 ├── bootstrap/
 │   └── app.py
 │
 ├── dashboard/
-│   ├── app.py
-│   └── pages/
-│       ├── 1_live_sensors.py
-│       ├── 2_anomaly_history.py
-│       ├── 3_model_registry.py
-│       └── 4_drift_reports.py
+│   ├── data/
+│   ├── pages/
+│   └── widgets/
 │
 ├── scripts/
 │   ├── replay_skab.py
 │   ├── inject_drift.py
 │   ├── trigger_retrain.py
-│   └── seed_initial_models.py
+│   ├── seed_initial_models.py
+│   └── run_skab_model_experiments.py
 │
 ├── infra/
-│   ├── docker-compose.yml
 │   ├── docker-compose.dev.yml
 │   ├── mosquitto/mosquitto.conf
 │   ├── prometheus/prometheus.yml
 │   ├── grafana/dashboards/
-│   │   ├── system.json
-│   │   └── ml-metrics.json
 │   └── mlflow/Dockerfile
 │
 ├── tests/
 │   ├── unit/
 │   └── integration/
 │
-├── data/                              # SKAB CSV (gitignored)
-├── mlruns/                            # MLflow artifacts (gitignored)
-├── logs/                              # gitignored
+├── artifacts/skab-model-experiments/  # retained summary.md and summary.csv only
+├── data/                              # bulk SKAB/runtime data gitignored except docs/placeholders
+├── mlruns/                            # MLflow runtime artifacts gitignored
+├── logs/                              # runtime logs gitignored
 │
-├── .env.example
 ├── .github/workflows/ci.yml
 ├── pyproject.toml
 └── Makefile
 ```
+
+Package roots are intentionally still `app`, `bootstrap`, and `ml` in `pyproject.toml`; no `src/` migration is part of this baseline. Generated/runtime artifacts remain ignored by default, with only small curated evidence summaries or screenshots retained for the report and presentation.
 
 ---
 
