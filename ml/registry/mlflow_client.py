@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import socket
@@ -26,6 +27,7 @@ DEFAULT_REGISTERED_MODEL_NAME = 'PumpAD'
 MODEL_DIR_ENV = 'PUMPAD_MODEL_DIR'
 _SYSTEM_METRICS_LOGGING_ATTEMPTED = False
 _SYSTEM_METRICS_WARNING_LOGGED = False
+logger = logging.getLogger(__name__)
 
 
 class InferenceService(Protocol):
@@ -34,16 +36,15 @@ class InferenceService(Protocol):
 
 
 def _enable_system_metrics_logging_if_available(mlflow: Any | None = None) -> bool:
-    global _SYSTEM_METRICS_LOGGING_ATTEMPTED, _SYSTEM_METRICS_WARNING_LOGGED
-    if _SYSTEM_METRICS_LOGGING_ATTEMPTED:
+    if globals()['_SYSTEM_METRICS_LOGGING_ATTEMPTED']:
         return True
-    _SYSTEM_METRICS_LOGGING_ATTEMPTED = True
+    globals()['_SYSTEM_METRICS_LOGGING_ATTEMPTED'] = True
     try:
         import_module('psutil')
     except ImportError:
-        if not _SYSTEM_METRICS_WARNING_LOGGED:
+        if not globals()['_SYSTEM_METRICS_WARNING_LOGGED']:
             print('MLflow system metrics logging skipped: psutil is not installed')
-            _SYSTEM_METRICS_WARNING_LOGGED = True
+            globals()['_SYSTEM_METRICS_WARNING_LOGGED'] = True
         return False
     if mlflow is None:
         try:
@@ -186,9 +187,8 @@ def log_skab_inputs_to_active_run(
     feature_mode: str,
     split_strategy: str,
 ) -> None:
-    try:
-        mlflow = import_module('mlflow')
-    except ImportError:
+    mlflow = sys.modules.get('mlflow')
+    if mlflow is None:
         return
     active_run = getattr(mlflow, 'active_run', None)
     if callable(active_run):
@@ -230,6 +230,45 @@ def log_skab_inputs_to_active_run(
             continue
 
 
+def log_supervised_label_evidence_to_active_run(
+    label_evidence: Mapping[str, Any],
+    *,
+    model_family: str,
+    data_source: str,
+    skip_reason: str | None = None,
+) -> None:
+    mlflow = sys.modules.get('mlflow')
+    if mlflow is None:
+        return
+    active_run = getattr(mlflow, 'active_run', None)
+    if callable(active_run):
+        try:
+            if active_run() is None:
+                return
+        except Exception:
+            return
+
+    tags = {
+        'supervised.label_source': str(label_evidence.get('source') or 'operator_labels'),
+        'supervised.model_family': _bounded_tag_value(model_family),
+        'supervised.data_source': _bounded_tag_value(data_source),
+        'supervised.include_labels': 'true' if bool(label_evidence.get('include_labels')) else 'false',
+        'supervised.evidence_status': 'skipped' if skip_reason else 'accepted',
+    }
+    if skip_reason is not None:
+        tags['supervised.skip_reason'] = _bounded_tag_value(skip_reason)
+    metrics = _supervised_label_evidence_metrics(label_evidence)
+    try:
+        mlflow.set_tags(tags)
+    except Exception:
+        pass
+    if metrics:
+        try:
+            mlflow.log_metrics(metrics)
+        except Exception:
+            pass
+
+
 def load_champion_service(
     model_name: str = DEFAULT_REGISTERED_MODEL_NAME,
     alias: str = 'champion',
@@ -241,10 +280,12 @@ def load_champion_service(
     return _load_service_from_local_dir(local_model_dir or os.getenv(MODEL_DIR_ENV))
 
 
-def _load_service_from_mlflow_alias(model_name: str, alias: str) -> InferenceService | None:
+def get_model_alias_metadata(
+    model_name: str = DEFAULT_REGISTERED_MODEL_NAME,
+    alias: str = 'champion',
+) -> dict[str, Any] | None:
     try:
         mlflow = import_module('mlflow')
-        mlflow_artifacts = import_module('mlflow.artifacts')
         mlflow_tracking = import_module('mlflow.tracking')
     except ImportError:
         return None
@@ -256,15 +297,30 @@ def _load_service_from_mlflow_alias(model_name: str, alias: str) -> InferenceSer
 
         client = mlflow_tracking.MlflowClient()
         version = client.get_model_version_by_alias(model_name, alias)
-        run_id = getattr(version, 'run_id', None)
-        if not run_id:
-            return None
+    except Exception:
+        return None
 
+    return _model_alias_metadata(version, model_name, alias)
+
+
+def _load_service_from_mlflow_alias(model_name: str, alias: str) -> InferenceService | None:
+    metadata = get_model_alias_metadata(model_name, alias)
+    if metadata is None:
+        return None
+
+    run_id = metadata.get('run_id')
+    if not run_id:
+        return None
+
+    try:
+        mlflow_artifacts = import_module('mlflow.artifacts')
         downloaded_dir = mlflow_artifacts.download_artifacts(run_id=str(run_id), artifact_path='')
         model_dir = _find_logged_artifact_dir(downloaded_dir)
         if model_dir is None:
             return None
-        return load_inference_service_from_artifacts(model_dir, _model_version(version))
+        service = load_inference_service_from_artifacts(model_dir, _metadata_str(metadata, 'mlflow_version'))
+        _attach_model_alias_metadata(service, metadata)
+        return service
     except Exception:
         return None
 
@@ -279,6 +335,89 @@ def _load_service_from_local_dir(model_dir: str | None) -> InferenceService | No
         return load_inference_service_from_artifacts(directory)
     except Exception:
         return None
+
+
+def _model_alias_metadata(version: Any, model_name: str, alias: str) -> dict[str, Any]:
+    registered_model_name = _attribute_str(version, 'name') or model_name
+    mlflow_version = _model_version(version)
+    metadata: dict[str, Any] = {
+        'name': registered_model_name,
+        'registered_model_name': registered_model_name,
+        'alias': str(alias),
+    }
+    if mlflow_version is not None:
+        metadata['version'] = mlflow_version
+        metadata['mlflow_version'] = mlflow_version
+
+    for field_name in (
+        'run_id',
+        'source',
+        'status',
+        'status_message',
+        'creation_timestamp',
+        'last_updated_timestamp',
+        'description',
+        'current_stage',
+        'run_link',
+    ):
+        value = getattr(version, field_name, None)
+        if value is not None:
+            metadata[field_name] = value
+
+    aliases = getattr(version, 'aliases', None)
+    if aliases is not None:
+        metadata['aliases'] = list(aliases)
+
+    tags = getattr(version, 'tags', None)
+    if tags is not None:
+        metadata['tags'] = dict(tags) if isinstance(tags, Mapping) else tags
+
+    artifact_path = _runs_artifact_path(_metadata_str(metadata, 'source'), _metadata_str(metadata, 'run_id'))
+    if artifact_path is not None:
+        metadata['artifact_path'] = artifact_path
+
+    return metadata
+
+
+def _runs_artifact_path(source: str | None, run_id: str | None) -> str | None:
+    if not source or not run_id:
+        return None
+    prefix = f'runs:/{run_id}/'
+    if not source.startswith(prefix):
+        return None
+    artifact_path = source[len(prefix) :]
+    return artifact_path or None
+
+
+def _attach_model_alias_metadata(service: InferenceService, metadata: Mapping[str, Any]) -> None:
+    service_metadata = getattr(service, 'metadata', {})
+    if isinstance(service_metadata, Mapping):
+        merged = dict(service_metadata)
+        merged.update(metadata)
+    else:
+        merged = dict(metadata)
+    try:
+        setattr(service, 'metadata', merged)
+    except Exception as exc:
+        logger.debug('could not attach MLflow alias metadata to service: %s', exc, exc_info=False)
+    for attr_name, metadata_key in (('run_id', 'run_id'), ('model_version', 'mlflow_version')):
+        value = _metadata_str(metadata, metadata_key)
+        if value is None:
+            continue
+        try:
+            setattr(service, attr_name, value)
+        except Exception as exc:
+            logger.debug('could not attach MLflow alias %s to service: %s', attr_name, exc, exc_info=False)
+
+
+def _attribute_str(obj: Any, name: str) -> str | None:
+    value = getattr(obj, name, None)
+    return None if value is None else str(value)
+
+
+def _metadata_str(metadata: Mapping[str, Any], key: str) -> str | None:
+    value = metadata.get(key)
+    return None if value is None else str(value)
 
 
 def log_lstm_ae_training_run(result: Any, model: Any, config: Any) -> str | None:
@@ -614,6 +753,38 @@ def _numeric_metrics(values: Any) -> dict[str, float]:
     return metrics
 
 
+def _supervised_label_evidence_metrics(label_evidence: Mapping[str, Any]) -> dict[str, float]:
+    train = _evidence_split_mapping(label_evidence, 'train')
+    validation = _evidence_split_mapping(label_evidence, 'validation')
+    return {
+        'supervised_label_train_sample_count': float(_mapping_int(train, 'sample_count')),
+        'supervised_label_train_normal_count': float(_mapping_int(train, 'normal_count')),
+        'supervised_label_train_anomaly_count': float(_mapping_int(train, 'anomaly_count')),
+        'supervised_label_validation_sample_count': float(_mapping_int(validation, 'sample_count')),
+        'supervised_label_validation_normal_count': float(_mapping_int(validation, 'normal_count')),
+        'supervised_label_validation_anomaly_count': float(_mapping_int(validation, 'anomaly_count')),
+        'supervised_label_train_two_class': 1.0 if bool(train.get('two_class')) else 0.0,
+        'supervised_label_validation_two_class': 1.0 if bool(validation.get('two_class')) else 0.0,
+    }
+
+
+def _mapping_int(values: Mapping[str, Any], key: str) -> int:
+    try:
+        return int(values.get(key, 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _evidence_split_mapping(label_evidence: Mapping[str, Any], split_name: str) -> Mapping[str, Any]:
+    split = label_evidence.get(split_name)
+    return split if isinstance(split, Mapping) else {}
+
+
+def _bounded_tag_value(value: Any, max_length: int = 80) -> str:
+    text = str(value)
+    return text if len(text) <= max_length else text[:max_length]
+
+
 def _model_signature_kwargs(result: Any) -> dict[str, Any]:
     input_example = _lookup(result, 'input_example', None)
     if input_example is None:
@@ -699,8 +870,10 @@ def _dataset_source_uri(path: Path | None, split_name: str) -> str:
 __all__ = [
     'PcaAnomalyInferenceService',
     '_enable_system_metrics_logging_if_available',
+    'get_model_alias_metadata',
     'load_champion_service',
     'log_isoforest_training_run',
+    'log_supervised_label_evidence_to_active_run',
     'log_skab_inputs_to_active_run',
     'log_lstm_ae_training_run',
     'log_pca_training_run',

@@ -52,6 +52,9 @@ def _install_fake_mlflow(monkeypatch, *, run_id: str | None = 'run-123', model_v
     def log_metrics(metrics):
         calls['metrics'].append(dict(metrics))
 
+    def log_metric(key, value, step=None):
+        calls.setdefault('metric', []).append((key, value, step))
+
     def log_artifacts(local_dir):
         calls['artifacts'].append(local_dir)
 
@@ -65,6 +68,7 @@ def _install_fake_mlflow(monkeypatch, *, run_id: str | None = 'run-123', model_v
     mlflow_any.start_run = start_run
     mlflow_any.log_params = log_params
     mlflow_any.log_metrics = log_metrics
+    mlflow_any.log_metric = log_metric
     mlflow_any.log_artifacts = log_artifacts
     mlflow_any.set_registered_model_alias = set_registered_model_alias
     mlflow_any.set_tags = set_tags
@@ -110,6 +114,52 @@ def _install_fake_mlflow(monkeypatch, *, run_id: str | None = 'run-123', model_v
     monkeypatch.setitem(sys.modules, 'mlflow', mlflow)
     monkeypatch.setitem(sys.modules, 'mlflow.sklearn', sklearn)
     monkeypatch.setitem(sys.modules, 'mlflow.tracking', tracking)
+    return calls
+
+
+def _install_fake_mlflow_alias_metadata(monkeypatch, *, version=None, error: Exception | None = None):
+    calls: dict[str, list[Any]] = {
+        'tracking_uris': [],
+        'aliases': [],
+        'downloads': [],
+    }
+    mlflow = types.ModuleType('mlflow')
+    mlflow.__path__ = []
+    mlflow_any = cast(Any, mlflow)
+
+    def set_tracking_uri(uri):
+        calls['tracking_uris'].append(uri)
+
+    mlflow_any.set_tracking_uri = set_tracking_uri
+
+    tracking = types.ModuleType('mlflow.tracking')
+    tracking_any = cast(Any, tracking)
+    model_version = version or SimpleNamespace(
+        name='PumpAD',
+        version='12',
+        run_id='run-123',
+        source='runs:/run-123/pca_anomaly_model',
+        aliases=['champion'],
+        status='READY',
+        status_message='ready',
+        creation_timestamp=1000,
+        last_updated_timestamp=2000,
+        tags={'model_family': 'pca'},
+    )
+
+    class FakeMlflowClient:
+        def get_model_version_by_alias(self, model_name, alias):
+            calls['aliases'].append((model_name, alias))
+            if error is not None:
+                raise error
+            return model_version
+
+    tracking_any.MlflowClient = FakeMlflowClient
+    mlflow_any.tracking = tracking
+
+    monkeypatch.setitem(sys.modules, 'mlflow', mlflow)
+    monkeypatch.setitem(sys.modules, 'mlflow.tracking', tracking)
+    monkeypatch.delitem(sys.modules, 'mlflow.artifacts', raising=False)
     return calls
 
 
@@ -204,3 +254,126 @@ def test_log_pca_training_run_skips_optional_registration_alias_and_missing_run_
         }
     ]
     assert calls['aliases'] == []
+
+
+def test_get_model_alias_metadata_reads_alias_without_artifact_download(monkeypatch):
+    calls = _install_fake_mlflow_alias_metadata(monkeypatch)
+    client = _mlflow_client()
+    original_import_module = client.import_module
+    imports: list[str] = []
+
+    def recording_import_module(name):
+        imports.append(name)
+        if name == 'mlflow.artifacts':
+            raise AssertionError('metadata lookup must not import mlflow.artifacts')
+        return original_import_module(name)
+
+    monkeypatch.setattr(client, 'import_module', recording_import_module)
+    monkeypatch.setenv('MLFLOW_TRACKING_URI', 'file:///tmp/mlruns-metadata')
+
+    metadata = client.get_model_alias_metadata('PumpAD', 'champion')
+
+    assert metadata == {
+        'name': 'PumpAD',
+        'registered_model_name': 'PumpAD',
+        'alias': 'champion',
+        'version': '12',
+        'mlflow_version': '12',
+        'run_id': 'run-123',
+        'source': 'runs:/run-123/pca_anomaly_model',
+        'artifact_path': 'pca_anomaly_model',
+        'aliases': ['champion'],
+        'status': 'READY',
+        'status_message': 'ready',
+        'creation_timestamp': 1000,
+        'last_updated_timestamp': 2000,
+        'tags': {'model_family': 'pca'},
+    }
+    assert calls['tracking_uris'] == ['file:///tmp/mlruns-metadata']
+    assert calls['aliases'] == [('PumpAD', 'champion')]
+    assert calls['downloads'] == []
+    assert 'mlflow.artifacts' not in imports
+    assert 'mlflow.artifacts' not in sys.modules
+
+
+def test_get_model_alias_metadata_keeps_non_run_sources_opaque(monkeypatch):
+    version = SimpleNamespace(
+        name='PumpAD',
+        version='13',
+        run_id='run-456',
+        source='s3://bucket/models/pca',
+        tags={},
+    )
+    _install_fake_mlflow_alias_metadata(monkeypatch, version=version)
+
+    metadata = _mlflow_client().get_model_alias_metadata('PumpAD', 'candidate')
+
+    assert metadata is not None
+    assert metadata['source'] == 's3://bucket/models/pca'
+    assert metadata['run_id'] == 'run-456'
+    assert 'artifact_path' not in metadata
+
+
+def test_get_model_alias_metadata_returns_none_when_alias_lookup_fails(monkeypatch):
+    _install_fake_mlflow_alias_metadata(monkeypatch, error=RuntimeError('missing alias'))
+
+    metadata = _mlflow_client().get_model_alias_metadata('PumpAD', 'champion')
+
+    assert metadata is None
+
+
+def test_log_supervised_label_evidence_to_active_run_logs_bounded_tags_and_metrics(monkeypatch):
+    calls = _install_fake_mlflow(monkeypatch)
+    mlflow = cast(Any, sys.modules['mlflow'])
+    mlflow.active_run = lambda: object()
+    evidence = {
+        'source': 'operator_labels',
+        'include_labels': True,
+        'train': {'sample_count': 4, 'normal_count': 2, 'anomaly_count': 2, 'two_class': True},
+        'validation': {'sample_count': 2, 'normal_count': 1, 'anomaly_count': 1, 'two_class': True},
+    }
+
+    _mlflow_client().log_supervised_label_evidence_to_active_run(
+        evidence,
+        model_family='xgboost',
+        data_source='live_clickhouse',
+        skip_reason=None,
+    )
+
+    assert calls['tags'] == [
+        {
+            'supervised.label_source': 'operator_labels',
+            'supervised.model_family': 'xgboost',
+            'supervised.data_source': 'live_clickhouse',
+            'supervised.include_labels': 'true',
+            'supervised.evidence_status': 'accepted',
+        }
+    ]
+    assert calls['metrics'] == [
+        {
+            'supervised_label_train_sample_count': 4.0,
+            'supervised_label_train_normal_count': 2.0,
+            'supervised_label_train_anomaly_count': 2.0,
+            'supervised_label_validation_sample_count': 2.0,
+            'supervised_label_validation_normal_count': 1.0,
+            'supervised_label_validation_anomaly_count': 1.0,
+            'supervised_label_train_two_class': 1.0,
+            'supervised_label_validation_two_class': 1.0,
+        }
+    ]
+
+
+def test_log_supervised_label_evidence_to_active_run_skips_without_active_run(monkeypatch):
+    calls = _install_fake_mlflow(monkeypatch)
+    mlflow = cast(Any, sys.modules['mlflow'])
+    mlflow.active_run = lambda: None
+
+    _mlflow_client().log_supervised_label_evidence_to_active_run(
+        {'include_labels': False},
+        model_family='lightgbm',
+        data_source='live_clickhouse',
+        skip_reason='supervised_operator_labels_unavailable',
+    )
+
+    assert calls['tags'] == []
+    assert calls['metrics'] == []
