@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Sequence
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from importlib import import_module
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any
 
 import numpy as np
 
+from ml.datasets.live_windows import LiveWindowDatasetBundle
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.datasets.skab_manifest import SkabSplitManifest, load_skab_split_manifest
 from ml.evaluation.metrics import evaluate_split
@@ -70,11 +72,27 @@ class PcaTrainingResult:
     sensor_columns: tuple[str, ...]
     input_example: Any | None = None
     output_example: Any | None = None
+    provenance: dict[str, Any] | None = None
 
 
 def train_pca_from_skab(config: PcaTrainingConfig) -> PcaTrainingResult:
     normalized_config = _normalize_config(config)
     result, detector = _fit_and_write_artifacts(normalized_config)
+
+    if normalized_config.log_mlflow or _active_mlflow_run_exists():
+        from ml.registry.mlflow_client import log_pca_training_run
+
+        log_pca_training_run(result, detector, normalized_config)
+
+    return result
+
+
+def train_pca_from_live_windows(
+    config: PcaTrainingConfig,
+    live_dataset: LiveWindowDatasetBundle,
+) -> PcaTrainingResult:
+    normalized_config = _normalize_config(config)
+    result, detector = _fit_and_write_artifacts_live(normalized_config, live_dataset)
 
     if normalized_config.log_mlflow or _active_mlflow_run_exists():
         from ml.registry.mlflow_client import log_pca_training_run
@@ -256,6 +274,113 @@ def _fit_and_write_artifacts_split(config: PcaTrainingConfig) -> tuple[PcaTraini
     return result, detector
 
 
+def _fit_and_write_artifacts_live(
+    config: PcaTrainingConfig,
+    live_dataset: LiveWindowDatasetBundle,
+) -> tuple[PcaTrainingResult, PcaT2QDetector]:
+    if config.feature_mode != 'raw':
+        raise ValueError('live_clickhouse PCA training supports only raw feature_mode')
+
+    train_windows = live_dataset.train
+    validation_windows = live_dataset.validation
+    test_windows = live_dataset.test
+    _validate_live_dataset(train_windows, config, 'train')
+    _validate_live_dataset(validation_windows, config, 'validation', allow_empty=True)
+    if test_windows is not None:
+        _validate_live_dataset(test_windows, config, 'test', allow_empty=True)
+
+    train_normal_mask = train_windows.labels == 0
+    train_normal_features = train_windows.features[train_normal_mask]
+    if len(train_normal_features) == 0:
+        raise ValueError('live training input must contain at least one normal window')
+
+    detector = PcaT2QDetector(
+        n_components=config.n_components,
+        threshold_quantile=config.threshold_quantile,
+        scaler=config.scaler,
+    ).fit(train_normal_features)
+
+    scoring_windows = validation_windows if len(validation_windows.features) > 0 else train_windows
+    if len(validation_windows.features) > 0:
+        validation_normal_mask = validation_windows.labels == 0
+        validation_normal_features = validation_windows.features[validation_normal_mask]
+        if len(validation_normal_features) == 0:
+            raise ValueError('live validation input must contain at least one normal window')
+        detector.calibrate_thresholds(validation_normal_features)
+
+    thresholds = {
+        't2_threshold': float(detector.t2_threshold_),
+        'q_threshold': float(detector.q_threshold_),
+    }
+    score_payload = _score_windows(detector, scoring_windows)
+    labels = score_payload['labels']
+    predictions = score_payload['predictions']
+    scores = score_payload['scores']
+    statistics = score_payload['statistics']
+
+    metrics = evaluate_split(
+        labels,
+        predictions,
+        scores,
+        transient_mask=scoring_windows.changepoints,
+    ) | {
+        **_count_metrics(labels, scoring_windows.changepoints),
+        'training_sample_count': int(len(train_windows.labels)),
+        'training_normal_count': int(len(train_normal_features)),
+        'train_count': int(len(train_windows.labels)),
+        'validation_count': int(len(validation_windows.labels)),
+        'data_source': 'live_clickhouse',
+        **thresholds,
+    }
+    if test_windows is not None and len(test_windows.features) > 0:
+        metrics['test_count'] = int(len(test_windows.labels))
+
+    params = _params(config, train_windows)
+    params['data_source'] = 'live_clickhouse'
+
+    artifact_paths = _artifact_paths_live(config.output_dir, test_windows is not None and len(test_windows.features) > 0)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    _dump_detector(detector, artifact_paths['detector'])
+    _scores_frame(scoring_windows, labels, predictions, statistics, scores).to_csv(artifact_paths['scores'], index=False)
+
+    if test_windows is not None and len(test_windows.features) > 0:
+        test_payload = _score_windows(detector, test_windows)
+        test_metrics = evaluate_split(
+            test_payload['labels'],
+            test_payload['predictions'],
+            test_payload['scores'],
+            transient_mask=test_windows.changepoints,
+        )
+        metrics.update({f'test_{name}': value for name, value in test_metrics.items()})
+        metrics.update(_count_metrics(test_payload['labels'], test_windows.changepoints, prefix='test_'))
+        _scores_frame(
+            test_windows,
+            test_payload['labels'],
+            test_payload['predictions'],
+            test_payload['statistics'],
+            test_payload['scores'],
+        ).to_csv(artifact_paths['test_scores'], index=False)
+
+    result = PcaTrainingResult(
+        output_dir=config.output_dir,
+        artifact_paths=artifact_paths,
+        params=params,
+        metrics=metrics,
+        thresholds=thresholds,
+        sensor_columns=train_windows.sensor_columns,
+        input_example=_input_example(train_normal_features),
+        output_example=_output_example(detector, _input_example(train_normal_features)),
+        provenance=live_dataset.provenance,
+    )
+    _write_json(artifact_paths['metrics'], metrics)
+    _write_json(
+        artifact_paths['metadata'],
+        _metadata_payload_live(config, result, train_windows, validation_windows, test_windows, live_dataset.provenance),
+    )
+    return result, detector
+
+
 def _parse_args(argv: Sequence[str] | None) -> PcaTrainingConfig:
     parser = argparse.ArgumentParser(description='Train a PCA T²/Q detector from SKAB CSV telemetry.')
     parser.add_argument('paths', type=Path, nargs='+', metavar='PATH')
@@ -405,6 +530,13 @@ def _artifact_paths_split(output_dir: Path, has_test: bool) -> dict[str, Path]:
     return paths
 
 
+def _artifact_paths_live(output_dir: Path, has_test: bool) -> dict[str, Path]:
+    paths = _artifact_paths(output_dir)
+    if has_test:
+        paths['test_scores'] = output_dir / 'test_scores.csv'
+    return paths
+
+
 def _scores_frame(
     dataset: WindowedSensorDataset,
     labels: np.ndarray,
@@ -433,6 +565,41 @@ def _count_metrics(labels: np.ndarray, changepoints: np.ndarray, prefix: str = '
         f'{prefix}normal_count': int(np.count_nonzero(labels == 0)),
         f'{prefix}changepoint_count': int(np.count_nonzero(changepoints == 1)),
     }
+
+
+def _score_windows(detector: PcaT2QDetector, windows: WindowedSensorDataset) -> dict[str, np.ndarray]:
+    statistics = detector.transform(windows.features)
+    scores = detector.score_samples(windows.features)
+    predictions = detector.predict(windows.features)
+    labels = windows.labels.astype(int, copy=False)
+    return {
+        'statistics': statistics,
+        'scores': scores,
+        'predictions': predictions,
+        'labels': labels,
+    }
+
+
+def _validate_live_dataset(
+    dataset: WindowedSensorDataset,
+    config: PcaTrainingConfig,
+    split_name: str,
+    *,
+    allow_empty: bool = False,
+) -> None:
+    if dataset.window_size != config.window_size:
+        raise ValueError(f'live {split_name} window_size must match training config')
+    if dataset.stride != config.stride:
+        raise ValueError(f'live {split_name} stride must match training config')
+    if dataset.sensor_columns != tuple(SENSOR_COLUMNS):
+        raise ValueError(f'live {split_name} sensor columns must match SENSOR_COLUMNS')
+    if not allow_empty and len(dataset.features) == 0:
+        raise ValueError(f'live {split_name} split must produce at least one window')
+    if len(dataset.features) != len(dataset.labels) or len(dataset.features) != len(dataset.changepoints):
+        raise ValueError(f'live {split_name} features, labels, and changepoints must have the same length')
+    expected_feature_count = config.window_size * len(SENSOR_COLUMNS)
+    if dataset.features.shape[1] != expected_feature_count:
+        raise ValueError(f'live {split_name} feature count must be {expected_feature_count}')
 
 
 def _dump_detector(detector: PcaT2QDetector, path: Path) -> None:
@@ -505,6 +672,36 @@ def _metadata_payload_split(
     return payload
 
 
+def _metadata_payload_live(
+    config: PcaTrainingConfig,
+    result: PcaTrainingResult,
+    train_windows: WindowedSensorDataset,
+    validation_windows: WindowedSensorDataset,
+    test_windows: WindowedSensorDataset | None,
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    has_held_out_test = test_windows is not None and len(test_windows.features) > 0
+    return {
+        'model_family': 'pca',
+        'data_source': 'live_clickhouse',
+        'params': result.params,
+        'metrics': result.metrics,
+        'thresholds': result.thresholds,
+        'sensor_columns': list(result.sensor_columns),
+        'artifact_paths': {name: str(path) for name, path in result.artifact_paths.items()},
+        'config': _jsonable_config(config),
+        'metric_protocol': _METRIC_PROTOCOL,
+        'provenance': dict(provenance),
+        'test_split_held_out': has_held_out_test,
+        'split': {
+            'train_count': int(len(train_windows.labels)),
+            'validation_count': int(len(validation_windows.labels)),
+            'test_count': int(len(test_windows.labels)) if test_windows is not None else 0,
+            'test_split_held_out': has_held_out_test,
+        },
+    }
+
+
 def _non_split_input_files(config: PcaTrainingConfig) -> list[Path]:
     paths = [config.input_path]
     if config.validation_input_path is not None:
@@ -555,12 +752,11 @@ def _log_skab_inputs_to_active_run(
 
 
 def _active_mlflow_run_exists() -> bool:
-    try:
-        mlflow = import_module('mlflow')
-        active_run = getattr(mlflow, 'active_run', None)
-        return bool(active_run()) if callable(active_run) else False
-    except Exception:
+    mlflow = sys.modules.get('mlflow')
+    if mlflow is None:
         return False
+    active_run = getattr(mlflow, 'active_run', None)
+    return bool(active_run()) if callable(active_run) else False
 
 
 def _input_example(features: np.ndarray) -> np.ndarray | None:
