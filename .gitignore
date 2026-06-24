@@ -34,6 +34,13 @@ mlflow.db
 *.joblib
 models/*.bin
 
+# Project generated/runtime artifacts
+/artifacts/**
+!/artifacts/
+!/artifacts/skab-model-experiments/
+!/artifacts/skab-model-experiments/summary.md
+!/artifacts/skab-model-experiments/summary.csv
+
 # Data (large, downloaded separately)
 data/*
 !data/.gitkeep
@@ -56,6 +63,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .playwright-mcp/
+.omo/
 
 # Jupyter
 .ipynb_checkpoints/

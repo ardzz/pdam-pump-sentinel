@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass, replace
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import xgboost.callback as _xgb_callback_module
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
+from ml.datasets.live_windows import LiveWindowDatasetBundle
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.datasets.skab_manifest import SkabSplitManifest, load_skab_split_manifest
 from ml.evaluation.metrics import evaluate_split, point_classification_metrics
@@ -63,6 +65,28 @@ class SupervisedTrainingResult:
     sensor_columns: tuple[str, ...]
     input_example: Any | None = None
     output_example: Any | None = None
+    provenance: dict[str, Any] | None = None
+    label_evidence: dict[str, Any] | None = None
+    deployment_eligible: bool = False
+    skipped: bool = False
+    skip_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class SupervisedTrainingSkipResult:
+    output_dir: Path
+    artifact_paths: dict[str, Path]
+    params: dict[str, Any]
+    metrics: dict[str, Any]
+    thresholds: dict[str, float]
+    sensor_columns: tuple[str, ...]
+    provenance: dict[str, Any] | None = None
+    label_evidence: dict[str, Any] | None = None
+    deployment_eligible: bool = False
+    skipped: bool = True
+    skip_reason: str = 'supervised_label_evidence_unavailable'
+    input_example: Any | None = None
+    output_example: Any | None = None
 
 
 def train_supervised_from_skab(config: SupervisedTrainingConfig) -> SupervisedTrainingResult:
@@ -76,6 +100,89 @@ def train_supervised_from_skab(config: SupervisedTrainingConfig) -> SupervisedTr
         result, model = _fit_and_write_artifacts(normalized_config)
         _log_supervised_training_run_safely(result, model, normalized_config)
 
+    return result
+
+
+def train_supervised_from_live_windows(
+    config: SupervisedTrainingConfig,
+    live_dataset: LiveWindowDatasetBundle,
+) -> SupervisedTrainingResult | SupervisedTrainingSkipResult:
+    normalized_config = _normalize_config(config)
+    mlflow_run_context = _start_mlflow_run_if_requested(normalized_config)
+    if mlflow_run_context is None:
+        return _train_supervised_from_live_windows_in_current_context(normalized_config, live_dataset)
+
+    with mlflow_run_context:
+        result = _train_supervised_from_live_windows_in_current_context(normalized_config, live_dataset)
+        if isinstance(result, SupervisedTrainingResult):
+            model = _load_logged_model(result)
+            if model is not None:
+                _log_supervised_training_run_safely(result, model, normalized_config)
+        return result
+
+
+def _train_supervised_from_live_windows_in_current_context(
+    config: SupervisedTrainingConfig,
+    live_dataset: LiveWindowDatasetBundle,
+) -> SupervisedTrainingResult | SupervisedTrainingSkipResult:
+    evidence = supervised_label_evidence(live_dataset)
+    skip_reason = supervised_label_skip_reason(evidence)
+    _log_label_evidence_to_active_run(evidence, config, skip_reason=skip_reason)
+    if skip_reason is not None:
+        return supervised_skip_result(
+            config,
+            skip_reason,
+            data_source='live_clickhouse',
+            provenance=live_dataset.provenance,
+            label_evidence=evidence,
+        )
+
+    result, _model = _fit_and_write_artifacts_live(config, live_dataset, evidence)
+    return result
+
+
+def supervised_skip_result(
+    config: SupervisedTrainingConfig,
+    skip_reason: str,
+    *,
+    data_source: str,
+    provenance: Mapping[str, Any] | None = None,
+    label_evidence: Mapping[str, Any] | None = None,
+) -> SupervisedTrainingSkipResult:
+    normalized_config = _normalize_config(config)
+    evidence_payload = dict(label_evidence or {})
+    metrics: dict[str, Any] = {
+        'skipped': True,
+        'skip_reason': skip_reason,
+        'deployment_eligible': False,
+        'data_source': data_source,
+    }
+    metrics.update(_label_evidence_metrics(evidence_payload))
+    params = {
+        'input_path': str(normalized_config.input_path),
+        'output_dir': str(normalized_config.output_dir),
+        'feature_mode': normalized_config.feature_mode,
+        'model_type': normalized_config.model_type,
+        'model_family': normalized_config.model_type,
+        'data_source': data_source,
+        'deployment_eligible': False,
+        'skip_reason': skip_reason,
+    }
+    artifact_paths = _skip_artifact_paths(normalized_config.output_dir)
+    normalized_config.output_dir.mkdir(parents=True, exist_ok=True)
+    result = SupervisedTrainingSkipResult(
+        output_dir=normalized_config.output_dir,
+        artifact_paths=artifact_paths,
+        params=params,
+        metrics=metrics,
+        thresholds={},
+        sensor_columns=tuple(SENSOR_COLUMNS),
+        provenance=dict(provenance) if provenance is not None else None,
+        label_evidence=evidence_payload,
+        skip_reason=skip_reason,
+    )
+    _write_json(artifact_paths['metrics'], metrics)
+    _write_json(artifact_paths['metadata'], _skip_metadata_payload(result, normalized_config, data_source))
     return result
 
 
@@ -100,6 +207,29 @@ def _fit_and_write_artifacts(config: SupervisedTrainingConfig) -> tuple[Supervis
         test_windows=None,
         provenance_input_files=_non_split_input_files(config),
     )
+
+
+def _fit_and_write_artifacts_live(
+    config: SupervisedTrainingConfig,
+    live_dataset: LiveWindowDatasetBundle,
+    label_evidence: Mapping[str, Any],
+) -> tuple[SupervisedTrainingResult, Any]:
+    train_windows = _enriched_live_dataset(live_dataset.train, config, 'train')
+    validation_windows = _enriched_live_dataset(live_dataset.validation, config, 'validation')
+    test_windows = _enriched_live_dataset(live_dataset.test, config, 'test') if live_dataset.test is not None else None
+    result, model = _fit_and_write_artifacts_common(
+        config=config,
+        train_windows=train_windows,
+        validation_windows=validation_windows,
+        test_windows=test_windows,
+        provenance_input_files=(),
+        data_source='live_clickhouse',
+        provenance=dict(live_dataset.provenance),
+        label_evidence=dict(label_evidence),
+        live=True,
+    )
+    _log_label_evidence_to_active_run(label_evidence, config, skip_reason=None)
+    return result, model
 
 
 def _fit_and_write_artifacts_split(config: SupervisedTrainingConfig) -> tuple[SupervisedTrainingResult, Any]:
@@ -129,6 +259,10 @@ def _fit_and_write_artifacts_common(
     test_windows: WindowedSensorDataset | None,
     provenance_input_files: Sequence[Path],
     manifest: SkabSplitManifest | None = None,
+    data_source: str | None = None,
+    provenance: dict[str, Any] | None = None,
+    label_evidence: dict[str, Any] | None = None,
+    live: bool = False,
 ) -> tuple[SupervisedTrainingResult, Any]:
     if len(train_windows.features) == 0:
         raise ValueError('training input must produce at least one window')
@@ -156,21 +290,26 @@ def _fit_and_write_artifacts_common(
         transient_mask=validation_windows.changepoints,
     ) | _accuracy_metric(validation_labels, validation_predictions)
 
-    metrics = validation_metrics | {
+    metrics: dict[str, Any] = validation_metrics | {
         **_count_metrics(validation_labels, validation_windows.changepoints),
         'training_sample_count': int(len(train_windows.labels)),
         'training_anomaly_count': int(np.count_nonzero(train_labels == 1)),
         'training_normal_count': int(np.count_nonzero(train_labels == 0)),
         'train_count': int(len(train_windows.labels)),
         'validation_count': int(len(validation_windows.labels)),
+        'deployment_eligible': False,
         **thresholds,
     }
+    if data_source is not None:
+        metrics['data_source'] = data_source
+    if label_evidence is not None:
+        metrics.update(_label_evidence_metrics(label_evidence))
 
     has_test = test_windows is not None and test_x is not None and len(test_windows.features) > 0
     if has_test and test_windows is not None:
         metrics['test_count'] = int(len(test_windows.labels))
 
-    params = _params(config, train_windows, threshold)
+    params = _params(config, train_windows, threshold, data_source=data_source)
     artifact_paths = _artifact_paths(config.output_dir, config.model_type, scaler is not None, manifest is not None, has_test)
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -209,13 +348,29 @@ def _fit_and_write_artifacts_common(
         sensor_columns=train_windows.sensor_columns,
         input_example=_input_example(train_x),
         output_example=_output_example(model, _input_example(train_x)),
+        provenance=provenance,
+        label_evidence=label_evidence,
+        deployment_eligible=False,
     )
     _write_json(artifact_paths['metrics'], metrics)
     _write_json(
         artifact_paths['metadata'],
-        _metadata_payload(config, result, provenance_input_files, manifest, train_windows, validation_windows, test_windows),
+        _metadata_payload(
+            config,
+            result,
+            provenance_input_files,
+            manifest,
+            train_windows,
+            validation_windows,
+            test_windows,
+            data_source=data_source,
+            provenance=provenance,
+            label_evidence=label_evidence,
+            live=live,
+        ),
     )
-    _log_skab_inputs_to_active_run(config, manifest, train_windows, validation_windows, test_windows)
+    if not live:
+        _log_skab_inputs_to_active_run(config, manifest, train_windows, validation_windows, test_windows)
     if not config.log_mlflow and _mlflow_module_for_live_boosting() is not None:
         _log_supervised_training_run_safely(result, model, config)
     return result, model
@@ -320,6 +475,55 @@ def _load_windows_multi(paths: list[Path], config: SupervisedTrainingConfig) -> 
     return _concat_datasets(datasets)
 
 
+def _enriched_live_dataset(
+    dataset: WindowedSensorDataset,
+    config: SupervisedTrainingConfig,
+    split_name: str,
+) -> WindowedSensorDataset:
+    _validate_live_dataset(dataset, config, split_name, allow_empty=split_name == 'test')
+    pandas = import_module('pandas')
+    sensor_values = np.asarray(dataset.features, dtype=np.float64).reshape(
+        len(dataset.features),
+        dataset.window_size,
+        len(dataset.sensor_columns),
+    )
+    if len(sensor_values) == 0:
+        return WindowedSensorDataset(
+            features=np.empty((0, _feature_count()), dtype=float),
+            labels=np.empty((0,), dtype=int),
+            changepoints=np.empty((0,), dtype=int),
+            timestamps=np.empty((0,), dtype=object),
+            sensor_columns=dataset.sensor_columns,
+            window_size=dataset.window_size,
+            stride=dataset.stride,
+        )
+
+    features: list[np.ndarray] = []
+    for window_index, window in enumerate(sensor_values):
+        frame = pandas.DataFrame(window, columns=list(dataset.sensor_columns))
+        frame['datetime'] = [f'{dataset.timestamps[window_index]}#{row_index}' for row_index in range(dataset.window_size)]
+        frame['anomaly'] = int(dataset.labels[window_index])
+        frame['changepoint'] = int(dataset.changepoints[window_index])
+        enriched_features, _labels, _changepoints, _timestamps = build_enriched_window_features(
+            frame,
+            window_size=dataset.window_size,
+            stride=dataset.window_size,
+            sensor_columns=dataset.sensor_columns,
+            n_bands=_SPECTRAL_N_BANDS,
+        )
+        features.append(enriched_features[0])
+
+    return WindowedSensorDataset(
+        features=np.vstack(features),
+        labels=dataset.labels.astype(int, copy=False),
+        changepoints=dataset.changepoints.astype(int, copy=False),
+        timestamps=dataset.timestamps,
+        sensor_columns=dataset.sensor_columns,
+        window_size=dataset.window_size,
+        stride=dataset.stride,
+    )
+
+
 def _concat_datasets(datasets: list[WindowedSensorDataset]) -> WindowedSensorDataset:
     if len(datasets) == 1:
         return datasets[0]
@@ -336,6 +540,107 @@ def _concat_datasets(datasets: list[WindowedSensorDataset]) -> WindowedSensorDat
 
 def _feature_count() -> int:
     return len(SENSOR_COLUMNS) * (_SPECTRAL_N_BANDS + 7) + _ENRICHED_DOMAIN_FEATURE_COUNT
+
+
+def _validate_live_dataset(
+    dataset: WindowedSensorDataset,
+    config: SupervisedTrainingConfig,
+    split_name: str,
+    *,
+    allow_empty: bool = False,
+) -> None:
+    if dataset.window_size != config.window_size:
+        raise ValueError(f'live {split_name} window_size must match training config')
+    if dataset.stride != config.stride:
+        raise ValueError(f'live {split_name} stride must match training config')
+    if dataset.sensor_columns != tuple(SENSOR_COLUMNS):
+        raise ValueError(f'live {split_name} sensor columns must match SENSOR_COLUMNS')
+    if not allow_empty and len(dataset.features) == 0:
+        raise ValueError(f'live {split_name} split must produce at least one window')
+    if len(dataset.features) != len(dataset.labels) or len(dataset.features) != len(dataset.changepoints):
+        raise ValueError(f'live {split_name} features, labels, and changepoints must have the same length')
+    expected_feature_count = config.window_size * len(SENSOR_COLUMNS)
+    if dataset.features.shape[1] != expected_feature_count:
+        raise ValueError(f'live {split_name} feature count must be {expected_feature_count}')
+
+
+def supervised_label_evidence(live_dataset: LiveWindowDatasetBundle) -> dict[str, Any]:
+    train_evidence = _split_label_evidence(live_dataset.train)
+    validation_evidence = _split_label_evidence(live_dataset.validation)
+    include_labels = bool((live_dataset.provenance or {}).get('include_labels'))
+    return {
+        'source': 'operator_labels',
+        'include_labels': include_labels,
+        'train': train_evidence,
+        'validation': validation_evidence,
+        'test': _split_label_evidence(live_dataset.test) if live_dataset.test is not None else None,
+        'train_two_class': train_evidence['two_class'],
+        'validation_two_class': validation_evidence['two_class'],
+        'durable': include_labels,
+    }
+
+
+def supervised_label_skip_reason(label_evidence: Mapping[str, Any]) -> str | None:
+    if not bool(label_evidence.get('include_labels')):
+        return 'supervised_operator_labels_unavailable'
+    train = _evidence_split_mapping(label_evidence, 'train')
+    validation = _evidence_split_mapping(label_evidence, 'validation')
+    if int(train.get('sample_count', 0)) == 0:
+        return 'supervised_train_labels_unavailable'
+    if int(validation.get('sample_count', 0)) == 0:
+        return 'supervised_validation_labels_unavailable'
+    if not bool(train.get('binary_valid')) or not bool(validation.get('binary_valid')):
+        return 'supervised_operator_labels_invalid'
+    if not bool(train.get('two_class')):
+        return 'supervised_train_labels_need_two_classes'
+    if not bool(validation.get('two_class')):
+        return 'supervised_validation_labels_need_two_classes'
+    return None
+
+
+def _split_label_evidence(dataset: WindowedSensorDataset | None) -> dict[str, Any]:
+    if dataset is None:
+        return {
+            'sample_count': 0,
+            'normal_count': 0,
+            'anomaly_count': 0,
+            'class_count': 0,
+            'two_class': False,
+            'binary_valid': False,
+        }
+    labels = np.asarray(dataset.labels, dtype=int).reshape(-1)
+    unique_labels = sorted(int(value) for value in np.unique(labels).tolist())
+    binary_valid = all(value in (0, 1) for value in unique_labels)
+    return {
+        'sample_count': int(labels.size),
+        'normal_count': int(np.count_nonzero(labels == 0)),
+        'anomaly_count': int(np.count_nonzero(labels == 1)),
+        'class_count': int(len(unique_labels)),
+        'classes': unique_labels,
+        'two_class': binary_valid and set(unique_labels) == {0, 1},
+        'binary_valid': binary_valid,
+    }
+
+
+def _label_evidence_metrics(label_evidence: Mapping[str, Any]) -> dict[str, int | bool]:
+    train = _evidence_split_mapping(label_evidence, 'train')
+    validation = _evidence_split_mapping(label_evidence, 'validation')
+    return {
+        'label_include_labels': bool(label_evidence.get('include_labels')),
+        'label_train_sample_count': int(train.get('sample_count', 0)),
+        'label_train_normal_count': int(train.get('normal_count', 0)),
+        'label_train_anomaly_count': int(train.get('anomaly_count', 0)),
+        'label_validation_sample_count': int(validation.get('sample_count', 0)),
+        'label_validation_normal_count': int(validation.get('normal_count', 0)),
+        'label_validation_anomaly_count': int(validation.get('anomaly_count', 0)),
+        'label_train_two_class': bool(train.get('two_class')),
+        'label_validation_two_class': bool(validation.get('two_class')),
+    }
+
+
+def _evidence_split_mapping(label_evidence: Mapping[str, Any], split_name: str) -> Mapping[str, Any]:
+    split = label_evidence.get(split_name)
+    return split if isinstance(split, Mapping) else {}
 
 
 def _make_scaler(name: str | None):
@@ -465,6 +770,8 @@ class MlflowXGBCallback(_xgb_callback_module.TrainingCallback):
                 continue
             dataset_key = _eval_dataset_key(str(dataset_name), dataset_index, len(dataset_items))
             for metric_name, values in metrics_by_name.items():
+                if not isinstance(values, Sequence):
+                    continue
                 if not values:
                     continue
                 _log_live_boosting_metric(
@@ -512,9 +819,8 @@ def _lightgbm_mlflow_callback(config: SupervisedTrainingConfig) -> Any | None:
 
 
 def _mlflow_module_for_live_boosting() -> Any | None:
-    try:
-        mlflow = import_module('mlflow')
-    except ImportError:
+    mlflow = sys.modules.get('mlflow')
+    if mlflow is None:
         return None
     active_run = getattr(mlflow, 'active_run', None)
     if callable(active_run):
@@ -621,6 +927,13 @@ def _artifact_paths(output_dir: Path, model_type: str, has_scaler: bool, has_man
     return paths
 
 
+def _skip_artifact_paths(output_dir: Path) -> dict[str, Path]:
+    return {
+        'metadata': output_dir / 'metadata.json',
+        'metrics': output_dir / 'metrics.json',
+    }
+
+
 def _scores_frame(dataset: WindowedSensorDataset, labels: np.ndarray, predictions: np.ndarray, scores: np.ndarray) -> Any:
     pandas = import_module('pandas')
     return pandas.DataFrame(
@@ -643,8 +956,14 @@ def _count_metrics(labels: np.ndarray, changepoints: np.ndarray, prefix: str = '
     }
 
 
-def _params(config: SupervisedTrainingConfig, training_windows: WindowedSensorDataset, threshold: float) -> dict[str, Any]:
-    return {
+def _params(
+    config: SupervisedTrainingConfig,
+    training_windows: WindowedSensorDataset,
+    threshold: float,
+    *,
+    data_source: str | None = None,
+) -> dict[str, Any]:
+    params = {
         'input_path': str(config.input_path),
         'output_dir': str(config.output_dir),
         'validation_input_path': str(config.validation_input_path) if config.validation_input_path is not None else None,
@@ -669,7 +988,11 @@ def _params(config: SupervisedTrainingConfig, training_windows: WindowedSensorDa
         'sensor_count': len(training_windows.sensor_columns),
         'feature_count': int(training_windows.features.shape[1]),
         'spectral_n_bands': _SPECTRAL_N_BANDS,
+        'deployment_eligible': False,
     }
+    if data_source is not None:
+        params['data_source'] = data_source
+    return params
 
 
 def _metadata_payload(
@@ -680,9 +1003,19 @@ def _metadata_payload(
     train_windows: WindowedSensorDataset,
     validation_windows: WindowedSensorDataset,
     test_windows: WindowedSensorDataset | None,
+    *,
+    data_source: str | None = None,
+    provenance: dict[str, Any] | None = None,
+    label_evidence: dict[str, Any] | None = None,
+    live: bool = False,
 ) -> dict[str, Any]:
+    resolved_provenance = provenance if provenance is not None else collect_provenance(
+        config=_jsonable_config(config), input_files=provenance_input_files
+    )
     payload: dict[str, Any] = {
         'model_family': config.model_type,
+        'deployment_eligible': False,
+        'skipped': False,
         'params': result.params,
         'metrics': result.metrics,
         'thresholds': result.thresholds,
@@ -690,8 +1023,12 @@ def _metadata_payload(
         'artifact_paths': {name: str(path) for name, path in result.artifact_paths.items()},
         'config': _jsonable_config(config),
         'metric_protocol': _SUPERVISED_METRIC_PROTOCOL,
-        'provenance': collect_provenance(config=_jsonable_config(config), input_files=provenance_input_files),
+        'provenance': resolved_provenance,
     }
+    if data_source is not None:
+        payload['data_source'] = data_source
+    if label_evidence is not None:
+        payload['label_evidence'] = label_evidence
     if manifest is not None:
         manifest_payload = manifest.to_payload()
         has_held_out_test = test_windows is not None and len(test_windows.features) > 0
@@ -705,7 +1042,39 @@ def _metadata_payload(
             'test_count': int(len(test_windows.labels)) if test_windows is not None else 0,
             'test_split_held_out': has_held_out_test,
         }
+    elif live:
+        has_held_out_test = test_windows is not None and len(test_windows.features) > 0
+        payload['test_split_held_out'] = has_held_out_test
+        payload['split'] = {
+            'train_count': int(len(train_windows.labels)),
+            'validation_count': int(len(validation_windows.labels)),
+            'test_count': int(len(test_windows.labels)) if test_windows is not None else 0,
+            'test_split_held_out': has_held_out_test,
+        }
     return payload
+
+
+def _skip_metadata_payload(
+    result: SupervisedTrainingSkipResult,
+    config: SupervisedTrainingConfig,
+    data_source: str,
+) -> dict[str, Any]:
+    return {
+        'model_family': config.model_type,
+        'data_source': data_source,
+        'deployment_eligible': False,
+        'skipped': True,
+        'skip_reason': result.skip_reason,
+        'params': result.params,
+        'metrics': result.metrics,
+        'thresholds': result.thresholds,
+        'sensor_columns': list(result.sensor_columns),
+        'artifact_paths': {name: str(path) for name, path in result.artifact_paths.items()},
+        'config': _jsonable_config(config),
+        'metric_protocol': _SUPERVISED_METRIC_PROTOCOL,
+        'provenance': result.provenance,
+        'label_evidence': result.label_evidence,
+    }
 
 
 def _non_split_input_files(config: SupervisedTrainingConfig) -> list[Path]:
@@ -757,6 +1126,26 @@ def _log_skab_inputs_to_active_run(
     )
 
 
+def _log_label_evidence_to_active_run(
+    label_evidence: Mapping[str, Any] | None,
+    config: SupervisedTrainingConfig,
+    *,
+    skip_reason: str | None,
+) -> None:
+    if label_evidence is None:
+        return
+    try:
+        from ml.registry.mlflow_client import log_supervised_label_evidence_to_active_run
+    except Exception:
+        return
+    log_supervised_label_evidence_to_active_run(
+        label_evidence,
+        model_family=config.model_type,
+        data_source='live_clickhouse',
+        skip_reason=skip_reason,
+    )
+
+
 def _input_example(features: np.ndarray) -> np.ndarray | None:
     if len(features) == 0:
         return None
@@ -772,6 +1161,17 @@ def _output_example(model: Any, input_example: np.ndarray | None) -> np.ndarray 
 def _dump_joblib(value: Any, path: Path) -> None:
     joblib = import_module('joblib')
     joblib.dump(value, path)
+
+
+def _load_logged_model(result: SupervisedTrainingResult) -> Any | None:
+    model_path = result.artifact_paths.get('model')
+    if model_path is None or not model_path.exists():
+        return None
+    try:
+        joblib = import_module('joblib')
+        return joblib.load(model_path)
+    except Exception:
+        return None
 
 
 def _start_mlflow_run_if_requested(config: SupervisedTrainingConfig) -> Any | None:
@@ -840,6 +1240,11 @@ def _log_supervised_training_run_to_active_run(
     }
     if numeric_metrics:
         mlflow.log_metrics(numeric_metrics)
+    _log_label_evidence_to_active_run(
+        getattr(result, 'label_evidence', None),
+        config,
+        skip_reason=getattr(result, 'skip_reason', None),
+    )
     _log_boosting_eval_curves(mlflow, model, config)
     mlflow.log_artifacts(str(result.output_dir))
     mlflow_sklearn.log_model(
@@ -865,7 +1270,8 @@ def _log_boosting_eval_curves(mlflow: Any, model: Any, config: SupervisedTrainin
         dataset_key = _eval_dataset_key(str(dataset_name), dataset_index, len(dataset_items))
         for metric_name, values in metrics_by_name.items():
             metric_key = f'{dataset_key}_{family_key}_{_metric_key(str(metric_name))}_round'
-            for step, value in enumerate(values or []):
+            metric_values = cast(Sequence[Any], values) if isinstance(values, Sequence) else []
+            for step, value in enumerate(metric_values):
                 try:
                     metric_value = float(value)
                 except (TypeError, ValueError):

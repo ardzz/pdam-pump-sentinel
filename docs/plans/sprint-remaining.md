@@ -83,7 +83,7 @@ From RouteMQ ↔ ML integration audit (this session):
 ### Parked technical follow-ups
 
 - [ ] **Reproducible supervised in-distribution split** — commit a manifest or `make` target for the chrono 80/20 (Kaggle-comparable) split and add it as an opt-in family in `scripts/train_all_for_comparison.py` so the ~0.90 in-distribution number lands in the same experiment for the report. (The cross-group supervised split is already wired.)
-- [ ] **Deferred: live spectral/enriched serving** — extend the inference/observe service to compute spectral/enriched features online so a spectral/enriched/supervised model can be SERVED live. Live champion currently serves raw-feature PCA only; spectral/enriched wins are offline-eval only.
+- [x] **Live PCA spectral serving** — `ml/inference/pca_inference.py` can now serve PCA artifacts trained with raw or spectral features. Enriched/supervised online serving remains deferred.
 - [ ] Optional: CatBoost + stacked ensemble (4th/5th Kaggle models); prod `docker-compose.yml`.
 
 ## Honest evaluation spectrum (report reference)

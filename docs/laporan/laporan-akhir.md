@@ -147,7 +147,7 @@ Tujuan pelaksanaan proyek PDAM Pump Sentinel adalah sebagai berikut.
 2. Menyimpan pembacaan terbaru ke Redis dan telemetry historis ke ClickHouse.
 3. Menjalankan inference anomali secara sinkron pada controller aplikasi.
 4. Menerapkan lima famili model: PCA Hotelling T²/Q, LSTM Autoencoder, Isolation Forest, XGBoost, dan LightGBM.
-5. Menyediakan tiga mode fitur, yaitu raw, spectral, dan enriched, dengan batasan bahwa live PCA inference melayani raw features saja.
+5. Menyediakan tiga mode fitur, yaitu raw, spectral, dan enriched, dengan live PCA inference yang melayani raw dan spectral features.
 6. Menghubungkan training dan model registry melalui MLflow, termasuk alias `@champion` dan local fallback.
 7. Menggunakan Evidently untuk data drift report dan pemicu retraining job.
 8. Membangun dashboard operator Streamlit dengan tujuh halaman utama.
@@ -184,8 +184,8 @@ Batasan masalah dalam proyek ini adalah sebagai berikut.
 7. Inference online bukan pola Queue ke Worker.
 8. Tidak ada `AnomalyDetectionJob` pada implementasi akhir.
 9. Infrastruktur queue dan job hanya dipakai untuk pekerjaan MLOps, yaitu `app/jobs/drift_report_job.py` dan `app/jobs/retraining_job.py`.
-10. Live PCA inference pada `ml/inference/pca_inference.py` melayani raw features saja.
-11. Mode spectral dan enriched dipakai untuk evaluasi offline, bukan live serving.
+10. Live PCA inference pada `ml/inference/pca_inference.py` melayani raw dan spectral features.
+11. Mode enriched dipakai untuk evaluasi offline, bukan live serving.
 12. Scheduled retraining bersifat PCA-only dan berbasis path dataset SKAB, bukan rolling window dari ClickHouse.
 13. Tidak ada runtime MLflow alias polling.
 14. Alias `@champion` diselesaikan saat cold start, dengan fallback lokal.
@@ -491,7 +491,7 @@ Stack teknologi yang dipakai dalam proyek ditunjukkan pada tabel berikut.
 | ML champion | PCA Hotelling T²/Q | Deteksi anomali multivariat yang cepat dan dapat dijelaskan. |
 | ML challenger | LSTM Autoencoder | Deteksi pola temporal berbasis reconstruction error. |
 | ML pembanding | Isolation Forest, XGBoost, LightGBM | Eksperimen offline untuk pembanding keluarga model. |
-| Feature mode | raw, spectral, enriched | Raw untuk live PCA inference, spectral dan enriched untuk evaluasi offline. |
+| Feature mode | raw, spectral, enriched | Raw dan spectral untuk live PCA inference; enriched untuk evaluasi offline. |
 | MLOps | MLflow 3.12, Evidently | Tracking, registry, alias, dataset cards, dan drift report. |
 | Observability | Prometheus, Grafana, mosquitto-exporter | Metrics aplikasi, broker, dan loop MLOps. |
 | Dashboard | Streamlit | Antarmuka operator dan reviewer. |
@@ -580,9 +580,9 @@ Implementasi model mencakup lima famili.
 5. LightGBM.
 
 Tiga mode fitur yang tersedia adalah raw, spectral, dan enriched.
-Mode raw menjadi jalur live inference PCA.
-Mode spectral dan enriched dipakai pada evaluasi offline.
-Pembatasan ini penting karena laporan tidak boleh menyatakan bahwa spectral atau enriched sudah dilayani pada live serving.
+Mode raw dan spectral menjadi jalur live inference PCA.
+Mode enriched dipakai pada evaluasi offline.
+Pembatasan ini penting karena laporan tidak boleh menyatakan bahwa enriched sudah dilayani pada live serving.
 
 PCA Hotelling T²/Q menjadi champion karena cepat, interpretatif, dan cocok sebagai normal-baseline detector.
 LSTM-AE menjadi challenger untuk membaca pola temporal.
@@ -590,7 +590,7 @@ Isolation Forest dipakai sebagai pembanding unsupervised.
 XGBoost dan LightGBM dipakai sebagai pembanding supervised untuk melihat upper bound ketika label tersedia.
 
 Output live inference berisi skor dan status anomali.
-Skor PCA berasal dari raw features pada `ml/inference/pca_inference.py`.
+Skor PCA berasal dari raw atau spectral features pada `ml/inference/pca_inference.py`, mengikuti metadata artifact model.
 Jika window belum cukup atau model belum tersedia, service harus tetap menjaga kontrak agar aplikasi tidak mengklaim hasil yang belum dapat dihitung.
 
 ## 4.4 MLOps Loop
@@ -830,6 +830,10 @@ Nilai sekitar 0.90 dari XGBoost dan LightGBM bukan klaim novel-fault detection.
 Nilai tersebut membutuhkan contoh berlabel tiap fault type pada train dan test.
 Nilai 0.985 pada random-window bukan klaim generalisasi valid karena memiliki risiko leakage maksimum.
 
+Harness pembanding yang diperluas juga menambahkan `08_isolation_forest_spectral`, `09_oneclass_svm_spectral`, `10_isolation_forest_conformal`, `11_forecasting_residual_naive`, dan `12_distance_profile_nearest_normal` untuk pelaporan eksperimen berikutnya.
+Baris tersebut harus dibaca sebagai pembanding protokol yang sama, bukan klaim bahwa model baru mengalahkan PCA spectral sebelum ada rerun lengkap dengan metrik held-out.
+`10_isolation_forest_conformal` adalah variasi threshold, sedangkan `12_distance_profile_nearest_normal` adalah baseline optional dengan batas runtime.
+
 Reference SKAB leaderboard dipakai hanya untuk perbandingan konteks.
 Angka yang tercatat pada sumber proyek adalah PCA T²+Q 0.76, LSTM-AE 0.74, Conv-AE 0.78, dan Isolation Forest 0.29 [2].
 Angka tersebut tidak dibandingkan langsung sebagai klaim akhir karena protokol evaluasi proyek memakai strategi split dan aturan tanpa point-adjustment yang berbeda.
@@ -910,7 +914,7 @@ Berdasarkan implementasi dan pengujian, kesimpulan proyek adalah sebagai berikut
 1. PDAM Pump Sentinel berhasil dibangun sebagai prototipe akademik yang menghubungkan MQTT, RouteMQ, Redis, ClickHouse, MLflow, Evidently, Prometheus, Grafana, dan Streamlit.
 2. Inference online berhasil ditempatkan secara sinkron di controller melalui `get_inference_service().observe()`.
 3. Sistem menerbitkan hasil anomali ke topic `factory/skab/{station}/anomaly` dan menyimpan data ke Redis serta ClickHouse.
-4. Lima famili model berhasil masuk ke cakupan implementasi, yaitu PCA Hotelling T²/Q, LSTM-AE, Isolation Forest, XGBoost, dan LightGBM.
+4. Lima famili model inti berhasil masuk ke cakupan implementasi, yaitu PCA Hotelling T²/Q, LSTM-AE, Isolation Forest, XGBoost, dan LightGBM. Harness pembanding tambahan juga mencatat One-Class SVM, conformal threshold, forecasting residual naive, dan nearest-normal distance profile sebagai baris eksperimen offline.
 5. MLflow registry dengan alias `@champion` memberi mekanisme pemilihan model yang dapat diaudit.
 6. Evidently DataDriftPreset memberi dasar drift check yang dapat memicu retraining job.
 7. Champion challenger gate memakai F1 margin 0.02 dan false alarm guard 1.05 agar promosi model tidak hanya mengejar F1.
@@ -923,7 +927,7 @@ Berdasarkan implementasi dan pengujian, kesimpulan proyek adalah sebagai berikut
 Keterbatasan proyek adalah sebagai berikut.
 
 1. Dataset yang dipakai adalah SKAB sebagai surrogate, bukan data PDAM asli.
-2. Live inference hanya melayani PCA raw features, sedangkan spectral dan enriched masih offline-eval only.
+2. Live inference PCA melayani raw dan spectral features, sedangkan enriched masih offline-eval only.
 3. Inference online tidak memakai Queue ke Worker.
 4. Tidak ada `AnomalyDetectionJob`.
 5. Queue dan job hanya dipakai untuk MLOps jobs.

@@ -5,6 +5,7 @@ from importlib import import_module
 from types import SimpleNamespace
 from typing import Any, cast
 
+import numpy as np
 import pytest
 
 
@@ -28,6 +29,10 @@ def _train_supervised():
     return import_module('ml.training.train_supervised')
 
 
+def _live_windows():
+    return import_module('ml.datasets.live_windows')
+
+
 class _FakeRun:
     info = SimpleNamespace(run_id='run-curve')
 
@@ -36,6 +41,24 @@ class _FakeRun:
 
     def __exit__(self, exc_type, exc, traceback):
         return False
+
+
+class _FakeBooster:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.classes_ = np.asarray([0, 1])
+        self.n_features_in_ = 94
+        self.feature_importances_ = np.ones(94)
+        self.train_y = np.empty((0,), dtype=int)
+
+    def fit(self, train_x, train_y, eval_set=None, verbose=False, eval_names=None, eval_metric=None, callbacks=None):
+        self.n_features_in_ = train_x.shape[1]
+        self.train_y = np.asarray(train_y, dtype=int)
+        return self
+
+    def predict_proba(self, features):
+        base = np.linspace(0.2, 0.8, len(features)) if len(features) else np.empty((0,), dtype=float)
+        return np.column_stack([1.0 - base, base])
 
 
 def _write_skab_csv(path, row_count=24, anomaly_start=None, offset=0.0, changepoint_indices=None):
@@ -66,6 +89,53 @@ def _write_split_manifest(path, train, validation, test):
     }
     path.write_text(json.dumps(payload, indent=2) + '\n')
     return path
+
+
+def _live_bundle(*, train_labels=(0, 0, 1, 1), validation_labels=(0, 1), include_labels=True):
+    live_windows = _live_windows()
+    windowing = import_module('ml.features.windowing')
+    sensor_columns = tuple(_skab_loader().SENSOR_COLUMNS)
+
+    def dataset(labels, offset):
+        rows = []
+        timestamps = []
+        for index, label in enumerate(labels):
+            base = offset + index * 10.0
+            rows.append(np.asarray([[base + sensor + step for sensor in range(len(sensor_columns))] for step in range(4)], dtype=float).reshape(-1))
+            timestamps.append(f'2026-06-01T00:00:{index:02d}Z')
+        return windowing.WindowedSensorDataset(
+            features=np.vstack(rows) if rows else np.empty((0, 4 * len(sensor_columns)), dtype=float),
+            labels=np.asarray(labels, dtype=int),
+            changepoints=np.zeros(len(labels), dtype=int),
+            timestamps=np.asarray(timestamps, dtype=object),
+            sensor_columns=sensor_columns,
+            window_size=4,
+            stride=4,
+        )
+
+    return live_windows.LiveWindowDatasetBundle(
+        train=dataset(train_labels, 10.0),
+        validation=dataset(validation_labels, 100.0),
+        test=None,
+        provenance={'data_source': 'live_clickhouse', 'include_labels': include_labels, 'split_counts': {'train': len(train_labels), 'validation': len(validation_labels), 'test': 0}},
+    )
+
+
+@pytest.fixture
+def fake_boosters(monkeypatch):
+    original_import_module = _train_supervised().import_module
+
+    def fake_import_module(name):
+        if name == 'xgboost':
+            return SimpleNamespace(XGBClassifier=_FakeBooster)
+        if name == 'lightgbm':
+            return SimpleNamespace(
+                LGBMClassifier=_FakeBooster,
+                early_stopping=lambda rounds, verbose=False: ('early_stopping', rounds, verbose),
+            )
+        return original_import_module(name)
+
+    monkeypatch.setattr(_train_supervised(), 'import_module', fake_import_module)
 
 
 @pytest.mark.parametrize('model_type', ['lightgbm', 'xgboost'])
@@ -291,3 +361,84 @@ def test_xgb_mlflow_callback_pickle_roundtrip():
     restored = pickle.loads(pickle.dumps(callback))
     assert isinstance(restored, train_supervised.MlflowXGBCallback)
     assert restored._family_key == 'xgb'
+
+
+@pytest.mark.parametrize(
+    ('include_labels', 'train_labels', 'validation_labels', 'expected_reason'),
+    [
+        (False, (0, 1), (0, 1), 'supervised_operator_labels_unavailable'),
+        (True, (0, 0), (0, 1), 'supervised_train_labels_need_two_classes'),
+        (True, (0, 1), (0, 0), 'supervised_validation_labels_need_two_classes'),
+        (True, (0, 2), (0, 1), 'supervised_operator_labels_invalid'),
+    ],
+)
+def test_train_supervised_from_live_windows_returns_honest_skip_for_invalid_label_evidence(
+    tmp_path,
+    include_labels,
+    train_labels,
+    validation_labels,
+    expected_reason,
+):
+    train_supervised = _train_supervised()
+    result = train_supervised.train_supervised_from_live_windows(
+        train_supervised.SupervisedTrainingConfig(
+            input_path=tmp_path / 'unused.csv',
+            output_dir=tmp_path / 'artifacts',
+            window_size=4,
+            stride=4,
+            model_type='xgboost',
+        ),
+        _live_bundle(train_labels=train_labels, validation_labels=validation_labels, include_labels=include_labels),
+    )
+
+    assert result.skipped is True
+    assert result.skip_reason == expected_reason
+    assert result.deployment_eligible is False
+    assert set(result.artifact_paths) == {'metadata', 'metrics'}
+    metadata = json.loads(result.artifact_paths['metadata'].read_text())
+    assert metadata['skipped'] is True
+    assert metadata['deployment_eligible'] is False
+    assert metadata['skip_reason'] == expected_reason
+    assert metadata['label_evidence']['include_labels'] is include_labels
+
+
+@pytest.mark.parametrize('model_type', ['xgboost', 'lightgbm'])
+def test_train_supervised_from_live_windows_trains_two_class_candidates_with_live_metadata(
+    tmp_path,
+    fake_boosters,
+    model_type,
+):
+    train_supervised = _train_supervised()
+    result = train_supervised.train_supervised_from_live_windows(
+        train_supervised.SupervisedTrainingConfig(
+            input_path=tmp_path / 'unused.csv',
+            output_dir=tmp_path / 'artifacts',
+            window_size=4,
+            stride=4,
+            model_type=model_type,
+            n_estimators=3,
+            early_stopping_rounds=0,
+            log_mlflow=False,
+            register_model=False,
+            alias=None,
+        ),
+        _live_bundle(),
+    )
+
+    assert result.skipped is False
+    assert result.deployment_eligible is False
+    assert result.params['data_source'] == 'live_clickhouse'
+    assert result.params['deployment_eligible'] is False
+    assert result.metrics['data_source'] == 'live_clickhouse'
+    assert result.metrics['deployment_eligible'] is False
+    assert result.metrics['label_train_two_class'] is True
+    assert result.metrics['label_validation_two_class'] is True
+    metadata = json.loads(result.artifact_paths['metadata'].read_text())
+    assert metadata['model_family'] == model_type
+    assert metadata['data_source'] == 'live_clickhouse'
+    assert metadata['deployment_eligible'] is False
+    assert metadata['skipped'] is False
+    assert metadata['label_evidence']['train_two_class'] is True
+    assert metadata['label_evidence']['validation_two_class'] is True
+    assert metadata['split']['train_count'] == 4
+    assert metadata['split']['validation_count'] == 2

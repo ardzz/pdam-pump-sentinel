@@ -64,7 +64,7 @@ make dashboard       # in a second terminal — Streamlit
 # Optional: seed MLflow + Redis champion (idempotent)
 MLFLOW_TRACKING_URI=http://localhost:5000 REDIS_HOST=localhost REDIS_PORT=6379 ENABLE_REDIS=true \
   uv run python scripts/seed_initial_models.py \
-    --input tests/fixtures/skab_tiny.csv --output-dir /tmp/pdam-seed \
+    --input tests/fixtures/skab_tiny.csv --output-dir artifacts/pdam-seed \
     --window-size 1 --stride 1 --n-components 2
 
 # Baseline shot before kicking the orchestrator
@@ -87,6 +87,22 @@ make screenshots TAG=postrun
 ```
 
 Output lands under `docs/presentation/screenshots/<tag>-<label>-<UTC timestamp>.png`. Use `--no-timestamp` to disable the timestamp suffix when overwriting is desired.
+
+## Verified T+9 capture
+
+Latest verified run: `uv run python scripts/run_e2e_demo.py --clean --observability-evidence` passed T+0–T+9 on 2026-06-09, followed by:
+
+```bash
+make screenshots TAG=t9-observability SCREENSHOT_TARGETS="grafana-pipeline-observability grafana-mlops-observability grafana-slo-health streamlit-observability-snapshot streamlit-runbook-observability"
+```
+
+Captured evidence files:
+
+- `docs/presentation/screenshots/t9-observability-grafana-pipeline-observability-20260609T130723Z.png`
+- `docs/presentation/screenshots/t9-observability-grafana-mlops-observability-20260609T130723Z.png`
+- `docs/presentation/screenshots/t9-observability-grafana-slo-health-20260609T130723Z.png`
+- `docs/presentation/screenshots/t9-observability-streamlit-observability-snapshot-20260609T130723Z.png`
+- `docs/presentation/screenshots/t9-observability-streamlit-runbook-observability-20260609T130723Z.png`
 
 ## Notes
 

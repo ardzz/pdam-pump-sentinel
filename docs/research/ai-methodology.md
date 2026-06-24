@@ -10,9 +10,11 @@ Keputusan model:
 
 | Role | Model | Alasan |
 |---|---|---|
-| Champion | PCA T²/Q | Cepat, interpretatif, sesuai process monitoring, dan tercatat di official SKAB proposed leaderboard. |
+| Deployment-preferred baseline | PCA T²/Q spectral | Cepat, interpretatif, sesuai process monitoring, dan tetap menjadi pilihan deployment kecuali rerun protokol sama membuktikan kandidat normal-only lain lebih baik. |
 | Challenger | LSTM Autoencoder | Menangkap pola temporal nonlinear; dipakai jika PCA memberi false alarm tinggi. |
-| Negative baseline | Isolation Forest | Pembanding sederhana, bukan kandidat utama. |
+| Comparative normal-only baselines | Isolation Forest spectral, One-Class SVM spectral, naive forecasting residual, nearest-normal distance profile | Bukti pembanding untuk trade-off recall dan false alarm, bukan pengganti otomatis untuk PCA spectral. |
+| Calibration variant | Isolation Forest conformal | Wrapper threshold pada skor Isolation Forest, bukan model terlatih terpisah. |
+| Supervised diagnostics | XGBoost dan LightGBM | Upper-bound offline ketika label fault tersedia, bukan klaim deteksi novel-fault Day-1. |
 
 ## Dataset Evidence
 
@@ -220,6 +222,8 @@ Kontrak metrik implementasi saat ini:
 - `event_count`, `event_recall`, `missed_events`, `false_alarm_events`, dan `mean_detection_delay_windows` dihitung dari range kontigu label/prediksi.
 - Suffix `_excluding_transient` berarti metrik dihitung ulang setelah window changepoint dikeluarkan.
 - `metadata.json` menyimpan `metric_protocol`, `test_split_held_out`, detail `split`, `artifact_paths`, dan `provenance`.
+
+Expanded SKAB harness menambah baris `08_isolation_forest_spectral`, `09_oneclass_svm_spectral`, `10_isolation_forest_conformal`, `11_forecasting_residual_naive`, dan `12_distance_profile_nearest_normal`. Semua baris normal-only tetap memakai train-normal fitting, validation-normal calibration, held-out `test_` metrics, dan tanpa point-adjustment. Baris conformal adalah variasi threshold, distance profile adalah baseline bounded optional, sedangkan XGBoost dan LightGBM tetap upper-bound diagnostics saja.
 
 Event-level rule:
 

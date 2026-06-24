@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
 from routemq.job import Job  # type: ignore[reportMissingImports]
 
 from app.jobs import drift_report_job, retraining_job
@@ -91,6 +92,9 @@ async def test_retraining_job_promotes_challenger(monkeypatch, tmp_path):
         assert fake_redis.values['pumpad:retrain:result']['finished_at']
         assert fake_redis.values['pumpad:retrain:result']['duration_seconds'] >= 0
         assert fake_redis.values['pumpad:retrain:result']['metrics'] == {'f1': 0.9, 'false_alarm_rate': 0.1}
+        assert fake_redis.values['pumpad:retrain:result']['data_source'] == 'skab'
+        assert fake_redis.values['pumpad:retrain:result']['model_family'] == 'pca'
+        assert fake_redis.values['pumpad:retrain:result']['provenance'] is None
         assert RETRAINING_JOBS.labels(result='promoted')._value.get() == 1
         assert _metric_sample_value(
             RETRAIN_DURATION,
@@ -147,6 +151,8 @@ async def test_retraining_job_rejects_challenger(monkeypatch, tmp_path):
         assert fake_redis.values['pumpad:retrain:result']['version'] == 'challenger'
         assert fake_redis.values['pumpad:retrain:result']['duration_seconds'] >= 0
         assert 'must exceed' in fake_redis.values['pumpad:retrain:result']['reason']
+        assert fake_redis.values['pumpad:retrain:result']['data_source'] == 'skab'
+        assert fake_redis.values['pumpad:retrain:result']['model_family'] == 'pca'
         assert RETRAINING_JOBS.labels(result='rejected')._value.get() == 1
         assert _metric_sample_value(
             RETRAIN_DURATION,
@@ -250,7 +256,329 @@ async def test_retraining_job_records_error_payload(monkeypatch):
         assert payload['version'] == 'unknown'
         assert payload['error'] == 'training failed'
         assert payload['duration_seconds'] >= 0
+        assert payload['data_source'] == 'skab'
+        assert payload['model_family'] == 'pca'
+        assert payload['provenance'] is None
         assert RETRAINING_JOBS.labels(result='error')._value.get() == 1
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_defaults_to_skab_source(monkeypatch, tmp_path):
+    fake_redis = FakeRedisManager(enabled=True)
+    train_calls = []
+
+    def train(config):
+        train_calls.append(config)
+        return SimpleNamespace(metrics={'f1': 0.9, 'false_alarm_rate': 0.1}, output_dir=tmp_path / 'challenger')
+
+    monkeypatch.delenv('PUMPAD_RETRAIN_DATA_SOURCE', raising=False)
+    monkeypatch.setattr(retraining_job, 'train_pca_from_skab', train, raising=True)
+    monkeypatch.setattr(retraining_job, '_read_champion_metrics', lambda: {'f1': 0.95, 'false_alarm_rate': 0.1})
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
+
+        assert len(train_calls) == 1
+        assert fake_redis.values['pumpad:retrain:result']['data_source'] == 'skab'
+        assert fake_redis.values['pumpad:retrain:result']['model_family'] == 'pca'
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_live_source_uses_fake_loader_and_trainer(monkeypatch, tmp_path):
+    fake_redis = FakeRedisManager(enabled=True)
+    fake_client = object()
+    fake_config = object()
+    fake_bundle = SimpleNamespace(provenance={'data_source': 'live_clickhouse', 'split_counts': {'train': 2}})
+    calls = []
+
+    def live_loader(client, config):
+        calls.append(('loader', client, config))
+        return fake_bundle
+
+    def live_trainer(config, bundle):
+        calls.append(('trainer', config, bundle))
+        return SimpleNamespace(
+            metrics={'f1': 0.9, 'false_alarm_rate': 0.1},
+            output_dir=tmp_path / 'challenger',
+            provenance=bundle.provenance,
+            run_id='live-run',
+        )
+
+    monkeypatch.setenv('PUMPAD_RETRAIN_DATA_SOURCE', 'live_clickhouse')
+    monkeypatch.setattr(retraining_job, '_clickhouse_training_client', lambda: fake_client, raising=True)
+    monkeypatch.setattr(retraining_job, '_live_extraction_config', lambda training_config: fake_config, raising=True)
+    monkeypatch.setattr(retraining_job, 'load_live_window_datasets', live_loader, raising=True)
+    monkeypatch.setattr(retraining_job, 'train_pca_from_live_windows', live_trainer, raising=True)
+    monkeypatch.setattr(retraining_job, '_read_champion_metrics', lambda: {'f1': 0.95, 'false_alarm_rate': 0.1})
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
+
+        assert calls[0] == ('loader', fake_client, fake_config)
+        assert calls[1][0] == 'trainer'
+        assert calls[1][2] == fake_bundle
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['data_source'] == 'live_clickhouse'
+        assert payload['model_family'] == 'pca'
+        assert payload['provenance'] == {'data_source': 'live_clickhouse', 'split_counts': {'train': 2}}
+        assert payload['run_id'] == 'live-run'
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_invalid_source_fails_without_promotion_or_hot_swap(monkeypatch):
+    fake_redis = FakeRedisManager(enabled=True)
+    inference_calls = []
+    mlflow_calls = []
+
+    monkeypatch.setenv('PUMPAD_RETRAIN_DATA_SOURCE', 'bogus')
+    monkeypatch.setattr(retraining_job, 'load_inference_service_from_artifacts', lambda model_dir: inference_calls.append(model_dir), raising=True)
+    monkeypatch.setattr(retraining_job, 'set_inference_service', lambda service: inference_calls.append(service), raising=True)
+    monkeypatch.setattr(retraining_job, '_promote_mlflow_champion_alias', lambda model_name='PumpAD': mlflow_calls.append(model_name), raising=True)
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        with pytest.raises(ValueError, match='PUMPAD_RETRAIN_DATA_SOURCE'):
+            await RetrainingJob().handle()
+
+        assert inference_calls == []
+        assert mlflow_calls == []
+        assert 'pumpad:active:model' not in fake_redis.values
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['success'] is False
+        assert payload['promoted'] is False
+        assert payload['data_source'] == 'bogus'
+        assert payload['model_family'] == 'pca'
+        assert payload['provenance'] is None
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_defaults_to_pca_model_family(monkeypatch, tmp_path):
+    fake_redis = FakeRedisManager(enabled=True)
+    train_calls = []
+
+    def train(config):
+        train_calls.append(config)
+        return SimpleNamespace(metrics={'f1': 0.9, 'false_alarm_rate': 0.1}, output_dir=tmp_path / 'challenger')
+
+    monkeypatch.delenv('PUMPAD_RETRAIN_DATA_SOURCE', raising=False)
+    monkeypatch.delenv('PUMPAD_RETRAIN_MODEL_FAMILY', raising=False)
+    monkeypatch.setattr(retraining_job, 'train_pca_from_skab', train, raising=True)
+    monkeypatch.setattr(retraining_job, '_read_champion_metrics', lambda: {'f1': 0.95, 'false_alarm_rate': 0.1})
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
+
+        assert len(train_calls) == 1
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['data_source'] == 'skab'
+        assert payload['model_family'] == 'pca'
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_lstm_ae_live_source_uses_fake_loader_and_trainer(monkeypatch, tmp_path):
+    fake_redis = FakeRedisManager(enabled=True)
+    fake_client = object()
+    fake_config = object()
+    fake_bundle = SimpleNamespace(provenance={'data_source': 'live_clickhouse', 'split_counts': {'train': 2}})
+    calls = []
+
+    def live_loader(client, config):
+        calls.append(('loader', client, config))
+        return fake_bundle
+
+    def lstm_trainer(config, bundle):
+        calls.append(('trainer', config, bundle))
+        return SimpleNamespace(
+            metrics={'f1': 0.92, 'false_alarm_rate': 0.08},
+            output_dir=tmp_path / 'challenger',
+            provenance=bundle.provenance,
+            run_id='lstm-live-run',
+        )
+
+    monkeypatch.setenv('PUMPAD_RETRAIN_DATA_SOURCE', 'live_clickhouse')
+    monkeypatch.setenv('PUMPAD_RETRAIN_MODEL_FAMILY', 'lstm_ae')
+    monkeypatch.setattr(retraining_job, '_clickhouse_training_client', lambda: fake_client, raising=True)
+    monkeypatch.setattr(retraining_job, '_live_extraction_config', lambda training_config: fake_config, raising=True)
+    monkeypatch.setattr(retraining_job, 'load_live_window_datasets', live_loader, raising=True)
+    monkeypatch.setattr(retraining_job, 'train_lstm_ae_from_live_windows', lstm_trainer, raising=True)
+    monkeypatch.setattr(retraining_job, '_read_champion_metrics', lambda: {'f1': 0.95, 'false_alarm_rate': 0.1})
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
+
+        assert calls[0] == ('loader', fake_client, fake_config)
+        assert calls[1][0] == 'trainer'
+        assert calls[1][2] == fake_bundle
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['data_source'] == 'live_clickhouse'
+        assert payload['model_family'] == 'lstm_ae'
+        assert payload['provenance'] == {'data_source': 'live_clickhouse', 'split_counts': {'train': 2}}
+        assert payload['run_id'] == 'lstm-live-run'
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_supervised_live_forces_labels_and_never_promotes(monkeypatch, tmp_path):
+    fake_redis = FakeRedisManager(enabled=True)
+    fake_client = object()
+    fake_bundle = SimpleNamespace(provenance={'data_source': 'live_clickhouse', 'include_labels': True})
+    calls = []
+    inference_calls = []
+    mlflow_calls = []
+
+    def live_loader(client, config):
+        calls.append(('loader', client, config))
+        return fake_bundle
+
+    def supervised_trainer(config, bundle):
+        calls.append(('trainer', config, bundle))
+        return SimpleNamespace(
+            metrics={'f1': 1.0, 'false_alarm_rate': 0.0},
+            output_dir=tmp_path / 'supervised-candidate',
+            provenance=bundle.provenance,
+            skipped=False,
+            deployment_eligible=False,
+            run_id='supervised-run',
+        )
+
+    monkeypatch.setenv('PUMPAD_RETRAIN_DATA_SOURCE', 'live_clickhouse')
+    monkeypatch.setenv('PUMPAD_RETRAIN_MODEL_FAMILY', 'xgboost')
+    monkeypatch.setenv('PUMPAD_LIVE_START', '2026-06-01T00:00:00Z')
+    monkeypatch.setenv('PUMPAD_LIVE_END', '2026-06-01T01:00:00Z')
+    monkeypatch.setenv('PUMPAD_LIVE_INCLUDE_LABELS', 'false')
+    monkeypatch.setattr(retraining_job, '_clickhouse_training_client', lambda: fake_client, raising=True)
+    monkeypatch.setattr(retraining_job, 'load_live_window_datasets', live_loader, raising=True)
+    monkeypatch.setattr(retraining_job, 'train_supervised_from_live_windows', supervised_trainer, raising=True)
+    monkeypatch.setattr(retraining_job, '_read_champion_metrics', lambda: {'f1': 0.1, 'false_alarm_rate': 0.5})
+    monkeypatch.setattr(retraining_job, 'load_inference_service_from_artifacts', lambda model_dir: inference_calls.append(model_dir), raising=True)
+    monkeypatch.setattr(retraining_job, 'set_inference_service', lambda service: inference_calls.append(service), raising=True)
+    monkeypatch.setattr(retraining_job, '_promote_mlflow_champion_alias', lambda model_name='PumpAD': mlflow_calls.append(model_name), raising=True)
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
+
+        assert calls[0][0] == 'loader'
+        live_config = calls[0][2]
+        assert live_config.include_labels is True
+        assert calls[1][0] == 'trainer'
+        training_config = calls[1][1]
+        assert training_config.model_type == 'xgboost'
+        assert training_config.register_model is False
+        assert training_config.alias is None
+        assert inference_calls == []
+        assert mlflow_calls == []
+        assert 'pumpad:active:model' not in fake_redis.values
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['success'] is True
+        assert payload['skipped'] is False
+        assert payload['deployment_eligible'] is False
+        assert payload['promoted'] is False
+        assert payload['reason'] == 'candidate is not deployment eligible'
+        assert payload['model_family'] == 'xgboost'
+        assert payload['data_source'] == 'live_clickhouse'
+        assert payload['run_id'] == 'supervised-run'
+        assert RETRAINING_JOBS.labels(result='rejected')._value.get() == 1
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_supervised_skab_returns_skip_payload_without_training_or_promotion(monkeypatch, tmp_path):
+    fake_redis = FakeRedisManager(enabled=True)
+    inference_calls = []
+    mlflow_calls = []
+
+    monkeypatch.delenv('PUMPAD_RETRAIN_DATA_SOURCE', raising=False)
+    monkeypatch.setenv('PUMPAD_RETRAIN_MODEL_FAMILY', 'lightgbm')
+    monkeypatch.setenv('PUMPAD_RETRAIN_DIR', str(tmp_path / 'supervised-skip'))
+    monkeypatch.setattr(retraining_job, 'load_inference_service_from_artifacts', lambda model_dir: inference_calls.append(model_dir), raising=True)
+    monkeypatch.setattr(retraining_job, 'set_inference_service', lambda service: inference_calls.append(service), raising=True)
+    monkeypatch.setattr(retraining_job, '_promote_mlflow_champion_alias', lambda model_name='PumpAD': mlflow_calls.append(model_name), raising=True)
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        await RetrainingJob().handle()
+
+        assert inference_calls == []
+        assert mlflow_calls == []
+        assert 'pumpad:active:model' not in fake_redis.values
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['success'] is True
+        assert payload['skipped'] is True
+        assert payload['deployment_eligible'] is False
+        assert payload['promoted'] is False
+        assert payload['reason'] == 'supervised_skab_scheduled_retraining_not_supported'
+        assert payload['model_family'] == 'lightgbm'
+        assert payload['data_source'] == 'skab'
+        assert payload['metrics']['skip_reason'] == 'supervised_skab_scheduled_retraining_not_supported'
+        assert RETRAINING_JOBS.labels(result='skipped')._value.get() == 1
+    finally:
+        RETRAIN_DURATION.clear()
+        RETRAINING_JOBS.clear()
+
+
+async def test_retraining_job_invalid_model_family_fails_without_promotion_or_hot_swap(monkeypatch):
+    fake_redis = FakeRedisManager(enabled=True)
+    train_calls = []
+    inference_calls = []
+    mlflow_calls = []
+
+    def train(config):
+        train_calls.append(config)
+        return SimpleNamespace(metrics={'f1': 0.9, 'false_alarm_rate': 0.1}, output_dir='/tmp/pumpad-bogus-challenger')
+
+    monkeypatch.delenv('PUMPAD_RETRAIN_DATA_SOURCE', raising=False)
+    monkeypatch.setenv('PUMPAD_RETRAIN_MODEL_FAMILY', 'bogus')
+    monkeypatch.setattr(retraining_job, 'train_pca_from_skab', train, raising=True)
+    monkeypatch.setattr(retraining_job, 'load_inference_service_from_artifacts', lambda model_dir: inference_calls.append(model_dir), raising=True)
+    monkeypatch.setattr(retraining_job, 'set_inference_service', lambda service: inference_calls.append(service), raising=True)
+    monkeypatch.setattr(retraining_job, '_promote_mlflow_champion_alias', lambda model_name='PumpAD': mlflow_calls.append(model_name), raising=True)
+    monkeypatch.setattr(retraining_job, 'redis_manager', fake_redis, raising=True)
+
+    RETRAIN_DURATION.clear()
+    RETRAINING_JOBS.clear()
+    try:
+        with pytest.raises(ValueError, match='PUMPAD_RETRAIN_MODEL_FAMILY'):
+            await RetrainingJob().handle()
+
+        assert train_calls == []
+        assert inference_calls == []
+        assert mlflow_calls == []
+        assert 'pumpad:active:model' not in fake_redis.values
+        payload = fake_redis.values['pumpad:retrain:result']
+        assert payload['success'] is False
+        assert payload['promoted'] is False
+        assert payload['model_family'] == 'bogus'
     finally:
         RETRAIN_DURATION.clear()
         RETRAINING_JOBS.clear()

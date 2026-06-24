@@ -536,3 +536,93 @@ def test_default_scaler_is_robust(tmp_path):
         output_dir=tmp_path / 'out',
     )
     assert config.scaler == 'robust'
+
+
+
+def _live_bundle(row_count=24, *, window_size=4, stride=2, validation_fraction=0.25, test_fraction=0.25):
+    live_windows = import_module('ml.datasets.live_windows')
+    pandas = _pandas()
+    sensor_columns = _skab_loader().SENSOR_COLUMNS
+    rows = []
+    for row_index in range(row_count):
+        row: dict[str, object] = {
+            'datetime': f'2026-06-01T00:00:{row_index:02d}Z',
+            'anomaly': int(row_index >= row_count - 4),
+            'changepoint': int(row_index == row_count - 4),
+        }
+        for column_index, sensor in enumerate(sensor_columns):
+            row[sensor] = 10.0 + row_index * 0.1 + column_index * 0.01
+        rows.append(row)
+    return live_windows.build_live_window_datasets(
+        pandas.DataFrame(rows),
+        live_windows.LiveWindowExtractionConfig(
+            start='2026-06-01T00:00:00Z',
+            end='2026-06-01T00:01:00Z',
+            station='ipa_01',
+            device_ids=('ipa_01',),
+            window_size=window_size,
+            stride=stride,
+            validation_fraction=validation_fraction,
+            test_fraction=test_fraction,
+            min_train_windows=1,
+        ),
+    )
+
+
+def test_train_pca_from_live_windows_writes_live_artifacts_and_provenance(tmp_path):
+    train_pca = _train_pca()
+    bundle = _live_bundle()
+    output_dir = tmp_path / 'live-artifacts'
+    config = train_pca.PcaTrainingConfig(
+        input_path=tmp_path / 'unused-live-input.csv',
+        output_dir=output_dir,
+        window_size=4,
+        stride=2,
+        threshold_quantile=0.9,
+    )
+
+    result = train_pca.train_pca_from_live_windows(config, bundle)
+
+    assert set(result.artifact_paths) == {'detector', 'metadata', 'metrics', 'scores', 'test_scores'}
+    for path in result.artifact_paths.values():
+        assert path.exists()
+        assert path.parent == output_dir
+    assert result.sensor_columns == tuple(_skab_loader().SENSOR_COLUMNS)
+    assert result.params['data_source'] == 'live_clickhouse'
+    assert result.metrics['data_source'] == 'live_clickhouse'
+    assert result.provenance == bundle.provenance
+    assert result.metrics['train_count'] == bundle.provenance['split_counts']['train']
+    assert result.metrics['validation_count'] == bundle.provenance['split_counts']['validation']
+    assert result.metrics['test_count'] == bundle.provenance['split_counts']['test']
+
+    metadata = json.loads(result.artifact_paths['metadata'].read_text())
+    assert metadata['model_family'] == 'pca'
+    assert metadata['data_source'] == 'live_clickhouse'
+    assert metadata['params']['data_source'] == 'live_clickhouse'
+    assert metadata['provenance']['data_source'] == 'live_clickhouse'
+    assert metadata['provenance']['station'] == 'ipa_01'
+    assert metadata['split']['train_count'] == bundle.provenance['split_counts']['train']
+    assert metadata['split']['validation_count'] == bundle.provenance['split_counts']['validation']
+    assert metadata['test_split_held_out'] is True
+
+    scores = _pandas().read_csv(result.artifact_paths['scores'])
+    test_scores = _pandas().read_csv(result.artifact_paths['test_scores'])
+    assert list(scores.columns) == ['timestamp', 'label', 'changepoint', 'prediction', 't2', 'q', 'score']
+    assert list(test_scores.columns) == ['timestamp', 'label', 'changepoint', 'prediction', 't2', 'q', 'score']
+    assert len(scores) == bundle.provenance['split_counts']['validation']
+    assert len(test_scores) == bundle.provenance['split_counts']['test']
+
+
+def test_train_pca_from_live_windows_rejects_non_raw_feature_mode(tmp_path):
+    train_pca = _train_pca()
+    bundle = _live_bundle(test_fraction=0.0)
+    config = train_pca.PcaTrainingConfig(
+        input_path=tmp_path / 'unused-live-input.csv',
+        output_dir=tmp_path / 'live-artifacts',
+        window_size=4,
+        stride=2,
+        feature_mode='spectral',
+    )
+
+    with pytest.raises(ValueError, match='raw feature_mode'):
+        train_pca.train_pca_from_live_windows(config, bundle)

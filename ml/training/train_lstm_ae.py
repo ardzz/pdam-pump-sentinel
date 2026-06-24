@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from importlib import import_module
 from pathlib import Path
@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 
+from ml.datasets.live_windows import LiveWindowDatasetBundle
 from ml.datasets.skab_loader import SENSOR_COLUMNS, load_skab_csv
 from ml.datasets.skab_manifest import SkabSplitManifest, load_skab_split_manifest
 from ml.evaluation.metrics import evaluate_split
@@ -51,6 +52,7 @@ class LstmAeTrainingResult:
     sensor_columns: tuple[str, ...]
     input_example: Any | None = None
     output_example: Any | None = None
+    provenance: dict[str, Any] | None = None
 
 
 def train_lstm_ae_from_skab(config: LstmAeTrainingConfig) -> LstmAeTrainingResult:
@@ -62,6 +64,23 @@ def train_lstm_ae_from_skab(config: LstmAeTrainingConfig) -> LstmAeTrainingResul
 
     with mlflow_run_context:
         result, model = _fit_and_write_artifacts(normalized_config, log_mlflow_epoch_metrics=True)
+        _log_lstm_ae_training_run_safely(result, model, normalized_config)
+
+    return result
+
+
+def train_lstm_ae_from_live_windows(
+    config: LstmAeTrainingConfig,
+    live_dataset: LiveWindowDatasetBundle,
+) -> LstmAeTrainingResult:
+    normalized_config = _normalize_config(config)
+    mlflow_run_context = _start_mlflow_run_if_requested(normalized_config)
+    if mlflow_run_context is None:
+        result, _ = _fit_and_write_artifacts_live(normalized_config, live_dataset)
+        return result
+
+    with mlflow_run_context:
+        result, model = _fit_and_write_artifacts_live(normalized_config, live_dataset, log_mlflow_epoch_metrics=True)
         _log_lstm_ae_training_run_safely(result, model, normalized_config)
 
     return result
@@ -123,6 +142,46 @@ def _fit_and_write_artifacts_split(
     )
 
 
+def _fit_and_write_artifacts_live(
+    config: LstmAeTrainingConfig,
+    live_dataset: LiveWindowDatasetBundle,
+    *,
+    log_mlflow_epoch_metrics: bool = False,
+) -> tuple[LstmAeTrainingResult, Any]:
+    train_windows = live_dataset.train
+    validation_windows = live_dataset.validation
+    test_windows = live_dataset.test
+    _validate_live_dataset(train_windows, config, 'train')
+    _validate_live_dataset(validation_windows, config, 'validation')
+    if test_windows is not None:
+        _validate_live_dataset(test_windows, config, 'test', allow_empty=True)
+
+    train_normal_mask = train_windows.labels == 0
+    train_normal_features = train_windows.features[train_normal_mask]
+    if len(train_normal_features) == 0:
+        raise ValueError('live training input must contain at least one normal window')
+
+    validation_normal_mask = validation_windows.labels == 0
+    if len(validation_windows.features[validation_normal_mask]) == 0:
+        raise ValueError('live validation input must contain at least one normal window')
+
+    scaler = _fit_scaler_from_normal_windows(train_normal_features, len(train_windows.sensor_columns))
+
+    return _fit_and_write_artifacts_common(
+        config=config,
+        train_windows=train_windows,
+        validation_windows=validation_windows,
+        test_windows=test_windows,
+        scaler_fit_paths=(),
+        provenance_input_files=(),
+        scaler=scaler,
+        data_source='live_clickhouse',
+        provenance=live_dataset.provenance,
+        live=True,
+        log_mlflow_epoch_metrics=log_mlflow_epoch_metrics,
+    )
+
+
 def _fit_and_write_artifacts_common(
     *,
     config: LstmAeTrainingConfig,
@@ -133,6 +192,10 @@ def _fit_and_write_artifacts_common(
     provenance_input_files: Sequence[Path],
     manifest: SkabSplitManifest | None = None,
     log_mlflow_epoch_metrics: bool = False,
+    scaler: StandardScaler | None = None,
+    data_source: str | None = None,
+    provenance: dict[str, Any] | None = None,
+    live: bool = False,
 ) -> tuple[LstmAeTrainingResult, Any]:
     train_normal_mask = train_windows.labels == 0
     if len(train_windows.features[train_normal_mask]) == 0:
@@ -144,7 +207,8 @@ def _fit_and_write_artifacts_common(
     if len(validation_windows.features[validation_normal_mask]) == 0:
         raise ValueError('validation input must contain at least one normal window')
 
-    scaler = StandardScaler().fit(_load_normal_sensor_rows(scaler_fit_paths))
+    if scaler is None:
+        scaler = StandardScaler().fit(_load_normal_sensor_rows(scaler_fit_paths))
     train_x = _scaled_windows(train_windows, scaler)
     validation_x = _scaled_windows(validation_windows, scaler)
     test_x = _scaled_windows(test_windows, scaler) if test_windows is not None else None
@@ -186,7 +250,7 @@ def _fit_and_write_artifacts_common(
     validation_scores = _reconstruction_errors(model, validation_x, config.batch_size)
     validation_predictions = (validation_scores > threshold).astype(int)
     validation_labels = validation_windows.labels.astype(int, copy=False)
-    metrics = evaluate_split(
+    metrics: dict[str, Any] = evaluate_split(
         validation_labels,
         validation_predictions,
         validation_scores,
@@ -199,6 +263,8 @@ def _fit_and_write_artifacts_common(
         'validation_count': int(len(validation_windows.labels)),
         **thresholds,
     }
+    if data_source is not None:
+        metrics['data_source'] = data_source
 
     has_test = False
     if test_windows is not None and test_x is not None and len(test_windows.features) > 0:
@@ -206,7 +272,14 @@ def _fit_and_write_artifacts_common(
         metrics['test_count'] = int(len(test_windows.labels))
 
     params = _params(config, train_windows, threshold)
-    artifact_paths = _artifact_paths_split(config.output_dir, has_test) if manifest is not None else _artifact_paths(config.output_dir)
+    if data_source is not None:
+        params['data_source'] = data_source
+    if live:
+        artifact_paths = _artifact_paths_live(config.output_dir, has_test)
+    elif manifest is not None:
+        artifact_paths = _artifact_paths_split(config.output_dir, has_test)
+    else:
+        artifact_paths = _artifact_paths(config.output_dir)
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     _save_model(model, artifact_paths['model'])
@@ -243,13 +316,16 @@ def _fit_and_write_artifacts_common(
         sensor_columns=train_windows.sensor_columns,
         input_example=_input_example(train_normal_x),
         output_example=_output_example(model, _input_example(train_normal_x), config.batch_size),
+        provenance=provenance,
     )
     _write_json(artifact_paths['metrics'], metrics)
-    _write_json(
-        artifact_paths['metadata'],
-        _metadata_payload(config, result, provenance_input_files, manifest, train_windows, validation_windows, test_windows),
-    )
-    _log_skab_inputs_to_active_run(config, manifest, train_windows, validation_windows, test_windows)
+    if live:
+        metadata = _metadata_payload_live(config, result, train_windows, validation_windows, test_windows, provenance or {})
+    else:
+        metadata = _metadata_payload(config, result, provenance_input_files, manifest, train_windows, validation_windows, test_windows)
+    _write_json(artifact_paths['metadata'], metadata)
+    if not live:
+        _log_skab_inputs_to_active_run(config, manifest, train_windows, validation_windows, test_windows)
     return result, model
 
 
@@ -350,6 +426,33 @@ def _load_normal_sensor_rows(paths: Sequence[Path]) -> np.ndarray:
     return np.vstack(rows)
 
 
+def _fit_scaler_from_normal_windows(normal_features: np.ndarray, sensor_count: int) -> StandardScaler:
+    sensor_rows = np.asarray(normal_features, dtype=np.float64).reshape(-1, sensor_count)
+    return StandardScaler().fit(sensor_rows)
+
+
+def _validate_live_dataset(
+    dataset: WindowedSensorDataset,
+    config: LstmAeTrainingConfig,
+    split_name: str,
+    *,
+    allow_empty: bool = False,
+) -> None:
+    if dataset.window_size != config.window_size:
+        raise ValueError(f'live {split_name} window_size must match training config')
+    if dataset.stride != config.stride:
+        raise ValueError(f'live {split_name} stride must match training config')
+    if dataset.sensor_columns != tuple(SENSOR_COLUMNS):
+        raise ValueError(f'live {split_name} sensor columns must match SENSOR_COLUMNS')
+    if not allow_empty and len(dataset.features) == 0:
+        raise ValueError(f'live {split_name} split must produce at least one window')
+    if len(dataset.features) != len(dataset.labels) or len(dataset.features) != len(dataset.changepoints):
+        raise ValueError(f'live {split_name} features, labels, and changepoints must have the same length')
+    expected_feature_count = config.window_size * len(SENSOR_COLUMNS)
+    if dataset.features.shape[1] != expected_feature_count:
+        raise ValueError(f'live {split_name} feature count must be {expected_feature_count}')
+
+
 def _scaled_windows(dataset: WindowedSensorDataset, scaler: StandardScaler) -> np.ndarray:
     sensor_count = len(dataset.sensor_columns)
     shaped = dataset.features.reshape(len(dataset.features), dataset.window_size, sensor_count)
@@ -433,6 +536,13 @@ def _artifact_paths(output_dir: Path) -> dict[str, Path]:
 def _artifact_paths_split(output_dir: Path, has_test: bool) -> dict[str, Path]:
     paths = _artifact_paths(output_dir)
     paths['split_manifest'] = output_dir / 'split_manifest.json'
+    if has_test:
+        paths['test_scores'] = output_dir / 'test_scores.csv'
+    return paths
+
+
+def _artifact_paths_live(output_dir: Path, has_test: bool) -> dict[str, Path]:
+    paths = _artifact_paths(output_dir)
     if has_test:
         paths['test_scores'] = output_dir / 'test_scores.csv'
     return paths
@@ -536,6 +646,36 @@ def _metadata_payload(
             'test_split_held_out': has_held_out_test,
         }
     return payload
+
+
+def _metadata_payload_live(
+    config: LstmAeTrainingConfig,
+    result: LstmAeTrainingResult,
+    train_windows: WindowedSensorDataset,
+    validation_windows: WindowedSensorDataset,
+    test_windows: WindowedSensorDataset | None,
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    has_held_out_test = test_windows is not None and len(test_windows.features) > 0
+    return {
+        'model_family': 'lstm_ae',
+        'data_source': 'live_clickhouse',
+        'params': result.params,
+        'metrics': result.metrics,
+        'thresholds': result.thresholds,
+        'sensor_columns': list(result.sensor_columns),
+        'artifact_paths': {name: str(path) for name, path in result.artifact_paths.items()},
+        'config': _jsonable_config(config),
+        'metric_protocol': _METRIC_PROTOCOL,
+        'provenance': dict(provenance),
+        'test_split_held_out': has_held_out_test,
+        'split': {
+            'train_count': int(len(train_windows.labels)),
+            'validation_count': int(len(validation_windows.labels)),
+            'test_count': int(len(test_windows.labels)) if test_windows is not None else 0,
+            'test_split_held_out': has_held_out_test,
+        },
+    }
 
 
 def _non_split_input_files(config: LstmAeTrainingConfig) -> list[Path]:

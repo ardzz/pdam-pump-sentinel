@@ -1,6 +1,7 @@
 from routemq.settings import TelemetrySettings  # type: ignore[reportMissingImports]
 from routemq.tsdb.telemetry_adapters import ClickHouseTelemetryAdapter  # type: ignore[reportMissingImports]
 
+from app.models.operator_label import OperatorLabelPayload
 from app.observability.metrics import PERSISTENCE_WRITES
 from app.services import persistence
 
@@ -27,6 +28,14 @@ class FakeClickHouseClient:
 
     async def insert(self, table, data, column_names):
         self.inserts.append({'table': table, 'data': data, 'column_names': column_names})
+
+
+class FakeNonClickHouseAdapter:
+    def __init__(self):
+        self.connected = False
+
+    async def connect(self):
+        self.connected = True
 
 
 def _reading():
@@ -153,3 +162,76 @@ async def test_history_persistence_skips_anomaly_score_when_score_is_none(monkey
     assert len(points) == 1
     assert points[0].measurements['Pressure'].value == 2.1
     assert fake_clickhouse.inserts == []
+
+
+async def test_operator_label_persistence_writes_clickhouse_row(monkeypatch):
+    fake_clickhouse = FakeClickHouseClient()
+    adapter = ClickHouseTelemetryAdapter('http://localhost:8123/default')
+    adapter._client = fake_clickhouse
+    monkeypatch.setattr(persistence.telemetry, 'adapter', adapter, raising=True)
+    label_payload = OperatorLabelPayload(
+        source_timestamp='2024-01-01T00:00:00Z',
+        label=1,
+        label_source='operator',
+        operator_id='operator-a',
+        reason='confirmed leak signature',
+    )
+
+    PERSISTENCE_WRITES.clear()
+    try:
+        await persistence.persist_operator_label('ipa_01', label_payload)
+
+        assert len(fake_clickhouse.inserts) == 1
+        insert = fake_clickhouse.inserts[0]
+        assert insert['table'] == 'operator_labels'
+        assert insert['column_names'] == [
+            'station',
+            'source_timestamp',
+            'label',
+            'label_source',
+            'operator_id',
+            'reason',
+            'created_at',
+            'updated_at',
+        ]
+        row = dict(zip(insert['column_names'], insert['data'][0]))
+        assert row['station'] == 'ipa_01'
+        assert row['source_timestamp'] == '2024-01-01T00:00:00Z'
+        assert row['label'] == 1
+        assert row['label_source'] == 'operator'
+        assert row['operator_id'] == 'operator-a'
+        assert row['reason'] == 'confirmed leak signature'
+        assert row['created_at'].tzinfo is not None
+        assert row['updated_at'].tzinfo is not None
+        assert PERSISTENCE_WRITES.labels(target='clickhouse', result='success')._value.get() == 1
+    finally:
+        PERSISTENCE_WRITES.clear()
+
+
+async def test_operator_label_persistence_connects_lazy_clickhouse_adapter(monkeypatch):
+    class LazyAdapter(ClickHouseTelemetryAdapter):
+        def __init__(self):
+            super().__init__('http://localhost:8123/default')
+            self.fake_client = FakeClickHouseClient()
+            self.connect_calls = 0
+
+        async def connect(self):
+            self.connect_calls += 1
+            self._client = self.fake_client
+
+    adapter = LazyAdapter()
+    monkeypatch.setattr(persistence.telemetry, 'adapter', adapter, raising=True)
+
+    await persistence.persist_operator_label('ipa_01', OperatorLabelPayload(source_timestamp='t0', label=0))
+
+    assert adapter.connect_calls == 1
+    assert adapter.fake_client.inserts[0]['table'] == 'operator_labels'
+
+
+async def test_operator_label_persistence_skips_non_clickhouse_adapter(monkeypatch):
+    adapter = FakeNonClickHouseAdapter()
+    monkeypatch.setattr(persistence.telemetry, 'adapter', adapter, raising=True)
+
+    await persistence.persist_operator_label('ipa_01', OperatorLabelPayload(source_timestamp='t0', label=1))
+
+    assert adapter.connected is False
