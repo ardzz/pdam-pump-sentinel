@@ -89,7 +89,7 @@ def operator_action_buttons(anomaly_payload: dict[str, Any], station: str) -> No
                 'ack_at': datetime.now(timezone.utc).isoformat(),
                 'note': note or 'Operator note submitted from UI',
             }
-            _write_operator_action('ack', station, note_payload, ACK_TTL_SECONDS, 'Saved operator note.')
+            _write_operator_action('note', station, note_payload, ACK_TTL_SECONDS, 'Saved operator note.')
 
 
 def collect_status_checks(station: str | None = None) -> dict[str, tuple[bool, str]]:
@@ -105,14 +105,16 @@ def collect_status_checks(station: str | None = None) -> dict[str, tuple[bool, s
 
 def _write_operator_action(kind: str, station: str, payload: dict[str, Any], ttl_seconds: int, success_message: str) -> None:
     try:
-        ok = data.record_operator_action(kind, station, payload, ttl_seconds)
+        result = data.record_operator_action(kind, station, payload, ttl_seconds)
     except Exception as exc:
         st.error(f'Operator action failed: {exc}')
         return
-    if ok:
-        st.success(success_message)
-    else:
+    if not result.ok:
         st.error('Operator action failed. Redis is unavailable.')
+        return
+    st.success(success_message)
+    if not result.history_ok:
+        st.warning('Action applied to live state, but durable history could not be recorded.')
 
 
 def _probe_mlflow() -> tuple[bool, str]:

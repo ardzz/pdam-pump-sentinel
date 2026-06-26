@@ -39,6 +39,15 @@ class FailingInsertClickHouseClient(FakeClickHouseClient):
         raise RuntimeError('clickhouse insert failed')
 
 
+class FakeRedisWriter:
+    def __init__(self):
+        self.calls: list[dict[str, Any]] = []
+
+    def set(self, key: str, value: str, ex: int | None = None):
+        self.calls.append({'key': key, 'value': value, 'ex': ex})
+        return True
+
+
 def _raise_clickhouse():
     raise RuntimeError('clickhouse unavailable')
 
@@ -391,3 +400,86 @@ def test_record_operator_action_history_returns_false_when_insert_fails(monkeypa
 
     assert data._record_operator_action_history('note', 'ipa_01', {'source_timestamp': 't0', 'note': 'x'}) is False
     assert fake.inserts == []
+
+
+def test_record_operator_action_writes_redis_state_and_history(monkeypatch):
+    redis_fake = FakeRedisWriter()
+    ch_fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_redis_client', lambda: redis_fake)
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: ch_fake)
+
+    result = data.record_operator_action(
+        'ack',
+        'ipa_01',
+        {'_ts': '2026-06-08T00:00:00+00:00', 'operator_id': 'op-1', 'note': 'Acked from UI'},
+        30,
+    )
+
+    assert result.ok is True
+    assert result.history_ok is True
+    assert bool(result) is True
+    assert redis_fake.calls[0]['key'] == 'pumpad:anomaly:ack:ipa_01:2026-06-08T00:00:00+00:00'
+    assert redis_fake.calls[0]['ex'] == 30
+    assert json.loads(redis_fake.calls[0]['value']) == {'operator_id': 'op-1', 'note': 'Acked from UI'}
+    assert len(ch_fake.inserts) == 1
+    insert = ch_fake.inserts[0]
+    assert insert['table'] == 'operator_actions'
+    assert insert['column_names'] == OPERATOR_ACTION_HISTORY_COLUMNS
+    row = dict(zip(insert['column_names'], insert['data'][0]))
+    assert row['station'] == 'ipa_01'
+    assert row['action_type'] == 'ack'
+    assert row['source_timestamp'] == '2026-06-08T00:00:00+00:00'
+    assert row['operator_id'] == 'op-1'
+
+
+@pytest.mark.parametrize(
+    ('kind', 'ttl_seconds', 'payload', 'expected_key'),
+    [
+        ('ack', 30, {'_ts': '2026-06-08T00:00:00+00:00'}, 'pumpad:anomaly:ack:ipa_01:2026-06-08T00:00:00+00:00'),
+        ('mute', 900, {'source_timestamp': '2026-06-08T00:00:00+00:00'}, 'pumpad:anomaly:mute:ipa_01'),
+        ('note', 30, {'_ts': '2026-06-08T00:00:00+00:00', 'note': 'bearing'}, 'pumpad:anomaly:note:ipa_01:2026-06-08T00:00:00+00:00'),
+    ],
+)
+def test_record_operator_action_persists_each_kind(monkeypatch, kind, ttl_seconds, payload, expected_key):
+    redis_fake = FakeRedisWriter()
+    ch_fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_redis_client', lambda: redis_fake)
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: ch_fake)
+
+    result = data.record_operator_action(kind, 'ipa_01', payload, ttl_seconds)
+
+    assert result.ok is True
+    assert result.history_ok is True
+    assert redis_fake.calls[0]['key'] == expected_key
+    assert redis_fake.calls[0]['ex'] == ttl_seconds
+    row = dict(zip(ch_fake.inserts[0]['column_names'], ch_fake.inserts[0]['data'][0]))
+    assert row['action_type'] == kind
+
+
+def test_record_operator_action_history_failure_keeps_redis_success(monkeypatch):
+    redis_fake = FakeRedisWriter()
+    ch_fake = FailingInsertClickHouseClient()
+    monkeypatch.setattr(data, '_redis_client', lambda: redis_fake)
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: ch_fake)
+
+    result = data.record_operator_action('mute', 'ipa_01', {'source_timestamp': 't0'}, 900)
+
+    assert result.ok is True
+    assert result.history_ok is False
+    assert bool(result) is True
+    assert redis_fake.calls[0]['key'] == 'pumpad:anomaly:mute:ipa_01'
+    assert ch_fake.inserts == []
+
+
+def test_record_operator_action_redis_failure_skips_history(monkeypatch):
+    ch_fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_redis_client', _raise)
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: ch_fake)
+
+    result = data.record_operator_action('ack', 'ipa_01', {'_ts': 't0'}, 30)
+
+    assert result.ok is False
+    assert result.history_ok is False
+    assert bool(result) is False
+    assert ch_fake.inserts == []
+    assert data.get_last_error() == 'offline'

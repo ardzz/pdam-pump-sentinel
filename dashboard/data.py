@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from urllib.parse import unquote, urlparse
@@ -192,7 +193,29 @@ def get_observability_snapshot(station: str, now: datetime | None = None) -> dic
     }
 
 
-def record_operator_action(kind: str, station: str, payload: dict[str, Any], ttl_seconds: int | None) -> bool:
+@dataclass(frozen=True)
+class OperatorActionResult:
+    """Outcome of an operator action write.
+
+    ``ok`` reflects the authoritative Redis current-state write; the result is
+    truthy only when Redis succeeded so existing ``if record_operator_action(...)``
+    callers keep working. ``history_ok`` reflects the optional, durable ClickHouse
+    history append, which never blocks the UI action.
+    """
+
+    ok: bool
+    history_ok: bool
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+
+def record_operator_action(
+    kind: str,
+    station: str,
+    payload: dict[str, Any],
+    ttl_seconds: int | None,
+) -> OperatorActionResult:
     global _last_error
 
     try:
@@ -204,10 +227,12 @@ def record_operator_action(kind: str, station: str, payload: dict[str, Any], ttl
         else:
             client.set(key, value, ex=ttl_seconds)
         _last_error = None
-        return True
     except (redis.RedisError, ConnectionError, TypeError, ValueError) as exc:
         _last_error = str(exc)
-        return False
+        return OperatorActionResult(ok=False, history_ok=False)
+
+    history_ok = _record_operator_action_history(kind, station, payload, ttl_seconds=ttl_seconds)
+    return OperatorActionResult(ok=True, history_ok=history_ok)
 
 
 def _record_operator_action_history(
@@ -412,6 +437,7 @@ def _aliases(value: Any) -> list[str]:
 
 
 __all__ = [
+    'OperatorActionResult',
     'get_active_model',
     'get_anomaly_history',
     'get_drift_result',
