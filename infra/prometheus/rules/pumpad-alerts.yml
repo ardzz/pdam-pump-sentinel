@@ -54,3 +54,12 @@ groups:
         annotations:
           summary: PumpAD active model metadata is stale
           description: Active champion metadata has not been refreshed for seven days.
+
+      - alert: PDAMHighSeverityAnomalyEvents
+        expr: sum by (station) (rate(pumpad_anomaly_events_total{severity="high"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: High severity pump anomaly events detected
+          description: High severity anomaly events are being published to factory/skab/{station}/anomaly; follow the operator runbook to triage the affected station.

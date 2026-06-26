@@ -55,7 +55,30 @@ def test_prometheus_loads_local_pumpad_alert_rules():
         'PDAMPersistenceWriteErrors',
         'PDAMDriftReportStale',
         'PDAMActiveModelStale',
+        'PDAMHighSeverityAnomalyEvents',
     }
+
+
+def test_prometheus_alerts_on_high_severity_anomaly_events():
+    rules = _load_yaml('infra/prometheus/rules/pumpad-alerts.yml')
+    alert = next(
+        rule
+        for group in rules['groups']
+        for rule in group['rules']
+        if rule.get('alert') == 'PDAMHighSeverityAnomalyEvents'
+    )
+
+    assert alert['expr'] == (
+        'sum by (station) (rate(pumpad_anomaly_events_total{severity="high"}[5m])) > 0'
+    )
+    assert 'pumpad_anomaly_events_total{severity="high"}' in alert['expr']
+    assert alert['for'] == '1m'
+    assert alert['labels']['severity'] == 'warning'
+    assert alert['annotations']['summary'] == 'High severity pump anomaly events detected'
+
+    description = alert['annotations']['description'].lower()
+    assert 'runbook' in description
+    assert 'anomaly' in description
 
 
 def test_prometheus_scrapes_mosquitto_exporter():
