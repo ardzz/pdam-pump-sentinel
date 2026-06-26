@@ -78,7 +78,7 @@ def test_record_operator_action_writes_ack_key(monkeypatch):
     result = data.record_operator_action(
         'ack',
         'ipa_01',
-        {'_ts': '2026-06-06T00:00:00+00:00', 'operator': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'},
+        {'_ts': '2026-06-06T00:00:00+00:00', 'operator_id': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'},
         30,
     )
 
@@ -87,7 +87,7 @@ def test_record_operator_action_writes_ack_key(monkeypatch):
     assert result.history_ok is True
     assert fake.calls[0]['key'] == 'pumpad:anomaly:ack:ipa_01:2026-06-06T00:00:00+00:00'
     assert fake.calls[0]['ex'] == 30
-    assert json.loads(fake.calls[0]['value']) == {'operator': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'}
+    assert json.loads(fake.calls[0]['value']) == {'operator_id': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'}
 
 
 def test_write_operator_action_full_success_shows_no_warning(monkeypatch):
@@ -174,7 +174,33 @@ def test_operator_action_buttons_submits_note_payload_as_note(monkeypatch):
     assert kind == 'note'
     assert station == 'ipa_01'
     assert payload['note'] == 'bearing noise'
+    assert payload['operator_id'] == 'dashboard'
     assert ttl == widgets.ACK_TTL_SECONDS
+
+
+@pytest.mark.parametrize(
+    ('clicked', 'expected_kind'),
+    [
+        ({'Acknowledge'}, 'ack'),
+        ({'Mute 15m'}, 'mute'),
+        ({'Add note', 'Submit note'}, 'note'),
+    ],
+)
+def test_operator_action_buttons_payloads_include_operator_id(monkeypatch, clicked, expected_kind):
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        widgets,
+        '_write_operator_action',
+        lambda kind, station, payload, ttl, message: captured.append(payload),
+    )
+    fake_st = FakeStreamlit(clicked_labels=clicked, note_text='bearing noise')
+    monkeypatch.setattr(widgets, 'st', fake_st)
+
+    widgets.operator_action_buttons({'source_timestamp': '2026-06-06T00:00:00+00:00'}, 'ipa_01')
+
+    assert len(captured) == 1
+    assert captured[0]['operator_id'] == 'dashboard'
+    assert 'operator' not in captured[0]
 
 
 @pytest.mark.parametrize(

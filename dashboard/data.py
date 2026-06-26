@@ -258,7 +258,7 @@ def _record_operator_action_history(
             station,
             _action_source_timestamp(payload),
             normalized,
-            _optional_str(payload.get('operator_id')),
+            _optional_str(payload.get('operator_id') or payload.get('operator')),
             _optional_str(payload.get('note')),
             _optional_str(payload.get('reason')),
             _action_mute_until(normalized, payload, created_at, ttl_seconds),

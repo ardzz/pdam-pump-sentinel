@@ -388,6 +388,23 @@ def test_record_operator_action_history_shapes_note_row(monkeypatch):
     assert row['mute_until'] is None
 
 
+def test_record_operator_action_history_falls_back_to_legacy_operator(monkeypatch):
+    fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: fake)
+    now = datetime(2026, 6, 8, 0, 0, tzinfo=timezone.utc)
+
+    result = data._record_operator_action_history(
+        'ack',
+        'ipa_01',
+        {'source_timestamp': '2026-06-08T00:00:00+00:00', 'operator': 'legacy'},
+        now=now,
+    )
+
+    assert result is True
+    row = dict(zip(fake.inserts[0]['column_names'], fake.inserts[0]['data'][0]))
+    assert row['operator_id'] == 'legacy'
+
+
 def test_record_operator_action_history_returns_false_when_client_unavailable(monkeypatch):
     monkeypatch.setattr(data, '_clickhouse_client', _raise_clickhouse)
 
@@ -430,6 +447,30 @@ def test_record_operator_action_writes_redis_state_and_history(monkeypatch):
     assert row['action_type'] == 'ack'
     assert row['source_timestamp'] == '2026-06-08T00:00:00+00:00'
     assert row['operator_id'] == 'op-1'
+
+
+def test_record_operator_action_widget_ack_payload_records_dashboard_operator(monkeypatch):
+    redis_fake = FakeRedisWriter()
+    ch_fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_redis_client', lambda: redis_fake)
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: ch_fake)
+
+    result = data.record_operator_action(
+        'ack',
+        'ipa_01',
+        {
+            '_ts': '2026-06-08T00:00:00+00:00',
+            'operator_id': 'dashboard',
+            'ack_at': '2026-06-08T00:00:01+00:00',
+            'note': 'Acked from UI',
+        },
+        30,
+    )
+
+    assert result.ok is True
+    assert result.history_ok is True
+    row = dict(zip(ch_fake.inserts[0]['column_names'], ch_fake.inserts[0]['data'][0]))
+    assert row['operator_id'] == 'dashboard'
 
 
 @pytest.mark.parametrize(
