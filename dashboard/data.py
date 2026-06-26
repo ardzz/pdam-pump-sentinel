@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
@@ -15,6 +16,20 @@ LATEST_ANOMALY_KEY = 'pumpad:latest:anomaly:{station}'
 DRIFT_RESULT_KEY = 'pumpad:drift:result'
 RETRAIN_RESULT_KEY = 'pumpad:retrain:result'
 ACTIVE_MODEL_KEY = 'pumpad:active:model'
+
+OPERATOR_ACTION_HISTORY_TABLE = 'operator_actions'
+OPERATOR_ACTION_HISTORY_COLUMNS = (
+    'action_id',
+    'station',
+    'source_timestamp',
+    'action_type',
+    'operator_id',
+    'note',
+    'reason',
+    'mute_until',
+    'payload_json',
+    'created_at',
+)
 
 _REDIS_CLIENT: Any | None = None
 _last_error: str | None = None
@@ -195,6 +210,46 @@ def record_operator_action(kind: str, station: str, payload: dict[str, Any], ttl
         return False
 
 
+def _record_operator_action_history(
+    action_type: str,
+    station: str,
+    payload: dict[str, Any],
+    *,
+    ttl_seconds: int | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """Append an operator action to durable ClickHouse history.
+
+    Append-only: never updates existing rows. Returns True when a history row
+    was inserted, False when ClickHouse history is unavailable or the insert
+    failed. It never raises into the caller's UI path.
+    """
+    try:
+        client = _clickhouse_client()
+        created_at = now or datetime.now(timezone.utc)
+        normalized = action_type.strip().lower()
+        row = [
+            str(payload.get('action_id') or uuid.uuid4()),
+            station,
+            _action_source_timestamp(payload),
+            normalized,
+            _optional_str(payload.get('operator_id')),
+            _optional_str(payload.get('note')),
+            _optional_str(payload.get('reason')),
+            _action_mute_until(normalized, payload, created_at, ttl_seconds),
+            json.dumps({k: v for k, v in payload.items() if not k.startswith('_')}, sort_keys=True),
+            created_at,
+        ]
+        client.insert(
+            OPERATOR_ACTION_HISTORY_TABLE,
+            [row],
+            column_names=list(OPERATOR_ACTION_HISTORY_COLUMNS),
+        )
+        return True
+    except Exception:
+        return False
+
+
 def _redis_json(key: str) -> dict[str, Any] | None:
     global _last_error
 
@@ -230,6 +285,37 @@ def _operator_action_key(kind: str, station: str, payload: dict[str, Any]) -> st
         or 'unknown'
     )
     return f'pumpad:anomaly:{normalized_kind}:{station}:{raw_ts}'
+
+
+def _action_source_timestamp(payload: dict[str, Any]) -> str:
+    raw = (
+        payload.get('_ts')
+        or payload.get('source_timestamp')
+        or payload.get('timestamp')
+        or payload.get('observed_at')
+        or 'unknown'
+    )
+    return str(raw)
+
+
+def _action_mute_until(
+    action_type: str,
+    payload: dict[str, Any],
+    created_at: datetime,
+    ttl_seconds: int | None,
+) -> datetime | None:
+    explicit = _parse_timestamp(payload.get('mute_until'))
+    if explicit is not None:
+        return explicit
+    if action_type == 'mute' and ttl_seconds:
+        return created_at + timedelta(seconds=int(ttl_seconds))
+    return None
+
+
+def _optional_str(value: Any) -> str | None:
+    if value in (None, ''):
+        return None
+    return str(value)
 
 
 def _first_value(payload: dict[str, Any] | None, *keys: str) -> Any:

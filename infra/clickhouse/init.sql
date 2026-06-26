@@ -32,3 +32,20 @@ CREATE TABLE IF NOT EXISTS operator_labels
 ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (station, source_timestamp, label_source);
+
+CREATE TABLE IF NOT EXISTS operator_actions
+(
+    action_id String,
+    station LowCardinality(String),
+    source_timestamp String,
+    action_type LowCardinality(String),
+    operator_id Nullable(String),
+    note Nullable(String),
+    reason Nullable(String),
+    mute_until Nullable(DateTime64(3, 'UTC')),
+    payload_json String,
+    created_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (station, source_timestamp, action_type, created_at);

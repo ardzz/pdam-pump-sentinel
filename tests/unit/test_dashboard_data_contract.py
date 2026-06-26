@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 
@@ -21,13 +21,26 @@ class FakeRedis:
 
 
 class FakeClickHouseClient:
-    def __init__(self, result: Any):
+    def __init__(self, result: Any = None):
         self.result = result
         self.calls: list[dict[str, Any]] = []
+        self.inserts: list[dict[str, Any]] = []
 
     def query(self, query: str, parameters: dict[str, Any]):
         self.calls.append({'query': query, 'parameters': parameters})
         return self.result
+
+    def insert(self, table: str, data: Any, column_names: Any = None):
+        self.inserts.append({'table': table, 'data': data, 'column_names': column_names})
+
+
+class FailingInsertClickHouseClient(FakeClickHouseClient):
+    def insert(self, table: str, data: Any, column_names: Any = None):
+        raise RuntimeError('clickhouse insert failed')
+
+
+def _raise_clickhouse():
+    raise RuntimeError('clickhouse unavailable')
 
 
 class FakeNamedResult:
@@ -267,3 +280,114 @@ def test_get_observability_snapshot_flags_stale_and_drift(monkeypatch):
     assert snapshot['components']['active_model'] == 'DEGRADED'
     assert snapshot['drift_detected'] is True
     assert snapshot['retrain_result'] == 'REJECTED'
+
+
+OPERATOR_ACTION_HISTORY_COLUMNS = [
+    'action_id',
+    'station',
+    'source_timestamp',
+    'action_type',
+    'operator_id',
+    'note',
+    'reason',
+    'mute_until',
+    'payload_json',
+    'created_at',
+]
+
+
+def test_record_operator_action_history_shapes_ack_row(monkeypatch):
+    fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: fake)
+    now = datetime(2026, 6, 8, 0, 0, tzinfo=timezone.utc)
+
+    result = data._record_operator_action_history(
+        'ack',
+        'ipa_01',
+        {
+            '_ts': '2026-06-08T00:00:00+00:00',
+            'source_timestamp': '2026-06-08T00:00:00+00:00',
+            'operator_id': 'op-1',
+            'reason': 'confirmed leak signature',
+        },
+        now=now,
+    )
+
+    assert result is True
+    assert len(fake.inserts) == 1
+    insert = fake.inserts[0]
+    assert insert['table'] == 'operator_actions'
+    assert insert['column_names'] == OPERATOR_ACTION_HISTORY_COLUMNS
+    assert len(insert['data']) == 1
+    row = dict(zip(insert['column_names'], insert['data'][0]))
+    assert row['station'] == 'ipa_01'
+    assert row['action_type'] == 'ack'
+    assert row['source_timestamp'] == '2026-06-08T00:00:00+00:00'
+    assert row['operator_id'] == 'op-1'
+    assert row['reason'] == 'confirmed leak signature'
+    assert row['note'] is None
+    assert row['mute_until'] is None
+    assert row['created_at'] == now
+    assert isinstance(row['action_id'], str) and row['action_id']
+    assert json.loads(row['payload_json']) == {
+        'source_timestamp': '2026-06-08T00:00:00+00:00',
+        'operator_id': 'op-1',
+        'reason': 'confirmed leak signature',
+    }
+
+
+def test_record_operator_action_history_shapes_mute_row(monkeypatch):
+    fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: fake)
+    now = datetime(2026, 6, 8, 0, 0, tzinfo=timezone.utc)
+
+    result = data._record_operator_action_history(
+        'mute',
+        'ipa_01',
+        {'source_timestamp': '2026-06-08T00:00:00+00:00', 'operator_id': 'op-2'},
+        ttl_seconds=900,
+        now=now,
+    )
+
+    assert result is True
+    insert = fake.inserts[0]
+    assert insert['table'] == 'operator_actions'
+    row = dict(zip(insert['column_names'], insert['data'][0]))
+    assert row['action_type'] == 'mute'
+    assert row['mute_until'] == now + timedelta(seconds=900)
+    assert row['note'] is None
+    assert row['reason'] is None
+
+
+def test_record_operator_action_history_shapes_note_row(monkeypatch):
+    fake = FakeClickHouseClient()
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: fake)
+    now = datetime(2026, 6, 8, 0, 0, tzinfo=timezone.utc)
+
+    result = data._record_operator_action_history(
+        'note',
+        'ipa_01',
+        {'timestamp': '2026-06-08T00:00:00+00:00', 'note': 'pump bearing noise', 'operator_id': 'op-3'},
+        now=now,
+    )
+
+    assert result is True
+    row = dict(zip(fake.inserts[0]['column_names'], fake.inserts[0]['data'][0]))
+    assert row['action_type'] == 'note'
+    assert row['note'] == 'pump bearing noise'
+    assert row['source_timestamp'] == '2026-06-08T00:00:00+00:00'
+    assert row['mute_until'] is None
+
+
+def test_record_operator_action_history_returns_false_when_client_unavailable(monkeypatch):
+    monkeypatch.setattr(data, '_clickhouse_client', _raise_clickhouse)
+
+    assert data._record_operator_action_history('ack', 'ipa_01', {'source_timestamp': 't0'}) is False
+
+
+def test_record_operator_action_history_returns_false_when_insert_fails(monkeypatch):
+    fake = FailingInsertClickHouseClient()
+    monkeypatch.setattr(data, '_clickhouse_client', lambda: fake)
+
+    assert data._record_operator_action_history('note', 'ipa_01', {'source_timestamp': 't0', 'note': 'x'}) is False
+    assert fake.inserts == []
