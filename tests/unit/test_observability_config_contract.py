@@ -145,6 +145,26 @@ def test_grafana_mlops_dashboard_references_new_metrics():
     assert any('pumpad_active_model_age_seconds' in query for query in queries)
 
 
+def test_grafana_mlops_dashboard_shows_operator_action_evidence():
+    dashboard = _load_dashboard('pumpad-mlops.json')
+    queries = _dashboard_queries(dashboard)
+
+    assert any(
+        'sum by (station) (rate(pumpad_anomaly_events_total{severity="high"}[5m]))' in query
+        for query in queries
+    )
+    assert any(
+        'sum by (station, action_type) (pumpad_operator_action_state)' in query
+        for query in queries
+    )
+    assert any('pumpad_operator_action_state' in query for query in queries)
+    assert any(
+        'FROM operator_actions' in query and 'ORDER BY created_at DESC' in query
+        for query in queries
+    )
+    assert not any('0 * sum' in query for query in queries)
+
+
 def test_grafana_system_health_dashboard_references_slo_metrics():
     dashboard = _load_dashboard('pumpad-system-health.json')
     queries = _dashboard_queries(dashboard)
