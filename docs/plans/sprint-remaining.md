@@ -1,6 +1,6 @@
 # Sprint — Remaining Tasks
 
-Status snapshot grounded in `git log` (HEAD `4e044fc`, ahead of `origin/main` by 3 commits pending push) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
+Status snapshot refreshed from PR #1 / branch `skab-extra-anomaly-experiments` (HEAD `9fc690a`, tracking `origin/skab-extra-anomaly-experiments`) and the roadmap in `design.md §11`. This is a living checklist; update as items land.
 
 ## Industrial-grade dashboard push (session 2026-06-06, Option C)
 
@@ -36,7 +36,7 @@ Visual + observability uplift covering Grafana and Streamlit:
 - **Cross-family comparison report serving** — `make mlflow-report` target serves comparison runs from `data/mlflow_live.db` on port 5050 in parallel with docker MLflow on `:5000` (`d514ad8`).
 - **Presentation supporting material** — `docs/presentation/labeling-strategy-notes.md` 121-line speaker notes with industry citations (6 vendors), peer-reviewed academic citations (4 papers), 13 repo proof-points, 5 honest gaps, and Indonesian speaker script (`e714009`).
 - **Demo-blocker P0 fixes** (surfaced from this sprint's RouteMQ ↔ ML integration audit):
-  - `46bc0c3` — `get_inference_service()` falls back to MLflow `load_champion_service('PumpAD','champion')` when `PUMPAD_MODEL_DIR` is empty/invalid; `MLFLOW_TRACKING_URI=http://mlflow:5000` set on app service in dev compose. Partial mitigation for the §5 "alias polling" gap — cold start is now wired; runtime polling still TODO.
+  - `46bc0c3` — `get_inference_service()` falls back to MLflow `load_champion_service('PumpAD','champion')` when `PUMPAD_MODEL_DIR` is empty/invalid; `MLFLOW_TRACKING_URI=http://mlflow:5000` set on app service in dev compose. Cold-start fallback for the §5 "alias polling" gap; runtime polling landed later via `ModelRefreshScheduler`.
   - `8788e83` — Persistence writes anomaly observation as a single ClickHouse row `measurement='anomaly_score'`, `value_float=score`, `value_int=flag`. Dashboard live-sensors + anomaly-history charts now actually render.
   - `dd38b06` — Retraining job + seed script write `name` / `version` / `activated_at` (additive) on `pumpad:active:model` Redis key. Dashboard Model Registry page no longer shows N/A.
 - **Smoke L1 verification — end-to-end pipeline confirmed live** (host bootstrap.app, fresh docker stack, replay → controller → PCA inference → MQTT publish → Redis + ClickHouse). Evidence captured: `pumpad:latest:anomaly:ipa_01` carrying real PCA T²/Q with `model_version="1"`; 3× `anomaly_score` rows in `telemetry_observations`; `pumpad:active:model` populated with dashboard-aligned fields. P0-A `load_champion_service` fallback exercised live — app downloaded artifacts on first message. Fixes landed during smoke:
@@ -52,8 +52,8 @@ Visual + observability uplift covering Grafana and Streamlit:
 - [ ] Slide deck → `docs/presentation/` (follow §13 demo storyboard, 13–14 min). Include MLflow Compare-Runs screenshots from experiment `pump_sentinel_model_comparison` and the per-iteration curves (LSTM-AE epoch loss, XGB/LGBM logloss-per-round). Pull from `labeling-strategy-notes.md` for industry/academic backing.
 - [x] **ADR docs** → `docs/adr/` 5 records landed (`c150845`): 0001 honest-eval split strategy (155 lines), 0002 no point-adjustment (176 lines), 0003 champion-challenger promotion gate (141 lines), 0004 MLflow alias pattern (172 lines), 0005 MLflow Datasets + traceability tags (135 lines). Each follows MADR template (Status, Date, Tags, Context, Decision Drivers, Considered Options, Decision Outcome, Consequences, Verification with file:line citations, References with academic + vendor URLs).
 - [x] **Demo script automation** — `scripts/run_e2e_demo.py` + `make demo` / `make demo-fast` / `make demo-skip-retrain` targets (`0ace5a7` + `1322fb3`). Covers all §13.1 phases T+0..T+8 with per-phase banners, asserts, and PASS/FAIL exit code: T+0 baseline precondition (active model + alias + ClickHouse table); T+1 replay normal; T+2 replay anomalous; T+3 inject drift via `scripts/inject_drift.py`; T+4 Evidently `DriftResult` (drift_share + dataset_drift); T+5 inline `RetrainingJob.handle` (deterministic, no queue worker required); T+6 MLflow run + challenger version verification; T+7 dynamic alias promotion to challenger version; T+8 `set_inference_service(load_champion_service(...))` in-process hot-swap + replay → asserts `Redis pumpad:latest:anomaly:{station}.model_version == challenger`. Verified live against running stack: all 9 phases PASS. Pytest variant under `tests/e2e/` not implemented (architectural follow-up).
-- [ ] Proposal final pass (`docs/proposal.md`).
-- [ ] README polish — surface `make mlflow-report`, MQTT topics `factory/skab/{station}/telemetry` and `factory/skab/{station}/anomaly`, and known limitations (no auto-refresh, synchronous inference path).
+- [ ] Proposal final pass (`docs/proposal.md`) — include the current synchronous inference flow, model-refresh scheduler, and final evaluation framing.
+- [x] README polish — now surfaces `make mlflow-report`, MQTT topics `factory/skab/{station}/telemetry` / `factory/skab/{station}/anomaly`, generated-artifact policy, and the synchronous inference limitation.
 
 ### Week 6 — Buffer
 
@@ -68,17 +68,22 @@ Documented in `docs/presentation/labeling-strategy-notes.md §5` and surfaced fr
 
 From `labeling-strategy-notes.md §5`:
 
-- [ ] **Operator label intake** — `app/controllers/label_controller.py` (NEW) + `infra/clickhouse/init.sql` extend (labels table) + dashboard triage UI on anomaly-history page so operators can confirm/reject anomalies.
-- [ ] **Supervised promotion in retraining loop** — `app/jobs/retraining_job.py:76-90` extension to dispatch supervised training when labeled data accumulates.
-- [ ] **Supervised training alias setter** — `ml/training/train_supervised.py:816-850` accepts `alias` arg but does not actually set the alias in the MLflow registry. Wire it.
-- [ ] **MLflow alias polling in live app** — `app/services/inference.py` add a reload-polling thread so an externally-promoted MLflow `@champion` is picked up without a hot-swap call. (`46bc0c3` added cold-start fallback; runtime polling still missing.)
+- [x] **Operator label intake backend** — `app/controllers/label_controller.py`, `app/models/operator_label.py`, `app/services/persistence.py`, `infra/clickhouse/init.sql`, and topic `factory/skab/{station}/label` are wired with unit coverage.
+- [ ] **Operator triage UI writes labels** — extend `dashboard/pages/2_anomaly_history.py` so confirm/reject actions produce durable operator labels, not only ack/mute/note actions.
+- [x] **Supervised retraining dispatch scaffolding** — `app/jobs/retraining_job.py` can route supervised families through live-window loading and supervised training evidence paths.
+- [ ] **Supervised promotion with real operator-label gates** — define the labeled-data eligibility threshold and registry-promotion policy once dashboard labels accumulate enough two-class evidence.
+- [ ] **Supervised training alias setter** — `ml/training/train_supervised.py` accepts `alias` arg but does not yet set the alias in the MLflow registry. Wire it.
+- [x] **MLflow alias polling in live app** — `app/services/inference.py` exposes `refresh_inference_service_from_alias`; `ml/monitoring/scheduler.py` adds `ModelRefreshScheduler`; `bootstrap/app.py` wires it behind `ENABLE_MODEL_REFRESH_SCHEDULER` / `MODEL_REFRESH_INTERVAL_MINUTES`.
 - [x] **DriftReportJob APScheduler hook** — `ml/monitoring/scheduler.py` now exports `DriftScheduler`; bootstrap wires it under `ENABLE_DRIFT_SCHEDULER` env flag (`b93019c`). Interval via `DRIFT_INTERVAL_MINUTES` (default 15). Drift → retrain chain runs automatically when both schedulers enabled.
 
 From RouteMQ ↔ ML integration audit (this session):
 
-- [ ] **Streamlit dashboard auto-refresh** — `dashboard/app.py` add `streamlit-autorefresh` or equivalent polling so the operator sees live state without manual reload.
-- [ ] **Alert mechanism beyond MQTT publish** — current implementation only publishes to `factory/skab/{station}/anomaly`; add at minimum a structured log alert at controller or persistence layer, optionally Slack/email/webhook for production.
-- [ ] **Reconcile Queue → Worker claim** — `README.md` and `design.md` claim a Queue → Worker pattern for anomaly inference; reality is synchronous in the controller (`app/controllers/anomaly_controller.py:18-23`). Either implement async queue dispatch OR update docs to reflect the synchronous flow.
+- [x] **Critical Streamlit auto-refresh** — `dashboard/pages/1_live_sensors.py` refreshes every 5s and `dashboard/pages/5_system_health.py` refreshes every 10s.
+- [ ] **Global Streamlit refresh policy** — decide whether Overview/Registry/Drift/Runbook also need explicit polling or whether their cache TTL/manual behavior is acceptable.
+- [x] **Local Prometheus alert rules** — scrape health, telemetry freshness, inference errors, persistence write errors, drift report age, active model age, and anomaly alert `PDAMHighSeverityAnomalyEvents` are documented in the observability portfolio.
+- [x] **Operator action evidence for local triage** — `operator_actions` stores ClickHouse history, `/metrics` exposes `pumpad_operator_action_state`, and Grafana MLOps row `Anomaly alert and operator action evidence` shows high-severity anomaly rate plus action history/state panels.
+- [ ] **Production incident routing beyond local alert/evidence** — keep `factory/skab/{station}/anomaly` and local `PDAMHighSeverityAnomalyEvents`; Slack/email/webhook routing, Alertmanager, and PagerDuty-style escalation remain future work.
+- [ ] **Reconcile Queue → Worker wording in design/proposal** — `README.md` now states synchronous inference, but `docs/plans/design.md` and `docs/proposal.md` still describe Queue → Worker anomaly inference. Either implement async queue dispatch OR update those docs to the synchronous controller flow.
 
 ### Parked technical follow-ups
 
