@@ -101,8 +101,8 @@ Captured evidence files:
 - `docs/presentation/screenshots/t9-observability-grafana-pipeline-observability-20260609T130723Z.png`
 - `docs/presentation/screenshots/t9-observability-grafana-mlops-observability-20260609T130723Z.png`
 - `docs/presentation/screenshots/t9-observability-grafana-slo-health-20260609T130723Z.png`
-- `docs/presentation/screenshots/t9-observability-streamlit-observability-snapshot-20260609T130723Z.png`
-- `docs/presentation/screenshots/t9-observability-streamlit-runbook-observability-20260609T130723Z.png`
+- `docs/presentation/screenshots/t9-observability-streamlit-observability-snapshot-20260628T0535Z.png`
+- `docs/presentation/screenshots/t9-observability-streamlit-runbook-observability-20260628T0535Z.png`
 
 For a fresh post-Task-5 capture, the `grafana-mlops-observability` target should include the Grafana MLOps row `Anomaly alert and operator action evidence` with the high severity anomaly rate, `pumpad_operator_action_state`, and recent `operator_actions` panels.
 
