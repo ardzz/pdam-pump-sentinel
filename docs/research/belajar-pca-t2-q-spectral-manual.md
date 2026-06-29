@@ -398,6 +398,19 @@ $$
 s = \sqrt{2.5}=1.581
 $$
 
+Cara meraba akarnya:
+
+```text
+cari angka yang kalau dikuadratkan mendekati 2.5:
+
+1.5^2   = 2.250  (kurang)
+1.6^2   = 2.560  (lebih)
+1.58^2  = 2.496  (kurang dikit)
+1.581^2 = 2.500  (pas)
+
+jadi sqrt(2.5) = 1.581
+```
+
 Kenapa standar deviasi lebih enak dari varians? Karena satuannya kembali mirip satuan data asli. Kalau data energi satuannya unit energi, standar deviasi juga terasa seperti unit energi. Varians terasa seperti unit energi kuadrat, jadi kurang nyaman dibaca.
 
 Bahasa bayinya: standar deviasi adalah ukuran satu langkah normal dari pusat. Kalau `s = 1.581`, maka beda sekitar `1.581` dari mean terasa seperti satu langkah sebaran normal.
@@ -1710,6 +1723,17 @@ $$
 \mathrm{sum}_E=8+9+10+11+12=50
 $$
 
+Cara raw jumlahnya:
+
+```text
+8 + 9 = 17
+17 + 10 = 27
+27 + 11 = 38
+38 + 12 = 50
+
+jadi sum_E = 50
+```
+
 Jumlah window:
 
 $$
@@ -1721,6 +1745,18 @@ Mean:
 $$
 \mu_E=\frac{\mathrm{sum}_E}{n}=\frac{50}{5}=10
 $$
+
+Cara raw pembagiannya:
+
+```text
+cari angka x 5 yang jadi 50:
+
+  9  x 5 = 45  (kurang)
+  11 x 5 = 55  (lebih)
+  10 x 5 = 50  (pas)
+
+jadi 50 / 5 = 10
+```
 
 ### 10.2 Hitung standar deviasi $E$
 
@@ -1740,17 +1776,53 @@ $$
 \sum d_E^2=4+1+0+1+4=10
 $$
 
+Cara raw jumlahnya:
+
+```text
+4 + 1 = 5
+5 + 0 = 5
+5 + 1 = 6
+6 + 4 = 10
+
+jadi sum d_E^2 = 10
+```
+
 Sample variance:
 
 $$
 s_E^2=\frac{\sum d_E^2}{n-1}=\frac{10}{4}=2.5
 $$
 
+Cara raw pembagiannya:
+
+```text
+cari angka x 4 yang jadi 10:
+
+  2   x 4 = 8   (kurang)
+  3   x 4 = 12  (lebih)
+  2.5 x 4 = 10  (pas)
+
+jadi 10 / 4 = 2.5
+```
+
 Standar deviasi:
 
 $$
 s_E=\sqrt{2.5}=1.581
 $$
+
+Cara meraba akarnya:
+
+```text
+cari angka yang kalau dikuadratkan mendekati 2.5:
+
+1.5^2   = 2.250  (kurang)
+1.6^2   = 2.560  (lebih)
+1.58^2  = 2.496  (kurang dikit)
+1.581^2 = 2.500  (pas)
+
+jadi sqrt(2.5) = 1.581
+```
 
 ### 10.3 Hitung mean $F$
 
@@ -1766,11 +1838,34 @@ $$
 \mathrm{sum}_F=29+30+30+31+32=152
 $$
 
+Cara raw jumlahnya:
+
+```text
+29 + 30 = 59
+59 + 30 = 89
+89 + 31 = 120
+120 + 32 = 152
+
+jadi sum_F = 152
+```
+
 Mean:
 
 $$
 \mu_F=\frac{\mathrm{sum}_F}{n}=\frac{152}{5}=30.4
 $$
+
+Cara raw pembagiannya:
+
+```text
+cari angka x 5 yang jadi 152:
+
+  30   x 5 = 150  (kurang)
+  31   x 5 = 155  (lebih)
+  30.4 x 5 = 152  (pas)
+
+jadi 152 / 5 = 30.4
+```
 
 ### 10.4 Hitung standar deviasi $F$
 
@@ -1784,11 +1879,45 @@ Tabel deviation:
 | W4 | 31 | 30.4 | 0.6 | 0.36 |
 | W5 | 32 | 30.4 | 1.6 | 2.56 |
 
+Cara raw kuadratnya:
+
+```text
+(-1.4)^2 = 1.4 x 1.4
+          = 1.4 x 1 + 1.4 x 0.4
+          = 1.400 + 0.560
+          = 1.960 -> 1.96
+
+(-0.4)^2 = 0.4 x 0.4
+          = 0.160 -> 0.16
+
+(-0.4)^2 = 0.4 x 0.4
+          = 0.160 -> 0.16
+
+0.6^2    = 0.6 x 0.6
+          = 0.360 -> 0.36
+
+1.6^2    = 1.6 x 1.6
+          = 1.6 x 1 + 1.6 x 0.6
+          = 1.600 + 0.960
+          = 2.560 -> 2.56
+```
+
 Jumlah kuadrat deviation:
 
 $$
 \sum d_F^2=1.96+0.16+0.16+0.36+2.56=5.20
 $$
+
+Cara raw jumlahnya:
+
+```text
+1.96 + 0.16 = 2.12
+2.12 + 0.16 = 2.28
+2.28 + 0.36 = 2.64
+2.64 + 2.56 = 5.20
+
+jadi sum d_F^2 = 5.20
+```
 
 Sample variance:
 
@@ -1796,11 +1925,36 @@ $$
 s_F^2=\frac{\sum d_F^2}{n-1}=\frac{5.20}{4}=1.30
 $$
 
+Cara raw pembagiannya:
+
+```text
+cari angka x 4 yang jadi 5.20:
+
+  1.2 x 4 = 4.800  (kurang)
+  1.4 x 4 = 5.600  (lebih)
+  1.3 x 4 = 5.200  (pas)
+
+jadi 5.20 / 4 = 1.30
+```
+
 Standar deviasi:
 
 $$
 s_F=\sqrt{1.30}=1.140
 $$
+
+Cara meraba akarnya:
+
+```text
+cari angka yang kalau dikuadratkan mendekati 1.30:
+
+1.1^2   = 1.210     (kurang)
+1.2^2   = 1.440     (lebih)
+1.14^2  = 1.300     (pas setelah dibulatkan)
+1.140^2 = 1.299600  (pas untuk catatan 3 desimal)
+
+jadi sqrt(1.30) = 1.140
+```
 
 ### 10.5 Simpan statistik training
 
@@ -1853,21 +2007,88 @@ $$
 z_E(W1)=\frac{8-10}{1.581}=\frac{-2}{1.581}=-1.265
 $$
 
+Cara raw W1:
+
+```text
+8 - 10 = -2
+
+cari angka x 1.581 mendekati 2:
+  1.2   x 1.581 = 1.897  (kurang)
+  1.3   x 1.581 = 2.055  (lebih)
+  1.26  x 1.581 = 1.992  (kurang sedikit)
+  1.265 x 1.581 = 2.000  (pas)
+
+jadi -2 / 1.581 = -1.265
+```
+
 $$
 z_E(W2)=\frac{9-10}{1.581}=\frac{-1}{1.581}=-0.632
 $$
+
+Cara raw W2:
+
+```text
+9 - 10 = -1
+
+cari angka x 1.581 mendekati 1:
+  0.6    x 1.581 = 0.949  (kurang)
+  0.7    x 1.581 = 1.107  (lebih)
+  0.63   x 1.581 = 0.996  (kurang sedikit)
+  0.6324 x 1.581 = 1.000  (pas untuk catatan)
+
+0.6324 dibulatkan di tabel menjadi 0.632
+jadi -1 / 1.581 = -0.632
+```
 
 $$
 z_E(W3)=\frac{10-10}{1.581}=\frac{0}{1.581}=0.000
 $$
 
+Cara raw W3:
+
+```text
+10 - 10 = 0
+
+0 dibagi angka apa pun tetap 0
+jadi 0 / 1.581 = 0.000
+```
+
 $$
 z_E(W4)=\frac{11-10}{1.581}=\frac{1}{1.581}=0.632
 $$
 
+Cara raw W4:
+
+```text
+11 - 10 = 1
+
+cari angka x 1.581 mendekati 1:
+  0.6    x 1.581 = 0.949  (kurang)
+  0.7    x 1.581 = 1.107  (lebih)
+  0.63   x 1.581 = 0.996  (kurang sedikit)
+  0.6324 x 1.581 = 1.000  (pas untuk catatan)
+
+0.6324 dibulatkan di tabel menjadi 0.632
+jadi 1 / 1.581 = 0.632
+```
+
 $$
 z_E(W5)=\frac{12-10}{1.581}=\frac{2}{1.581}=1.265
 $$
+
+Cara raw W5:
+
+```text
+12 - 10 = 2
+
+cari angka x 1.581 mendekati 2:
+  1.2   x 1.581 = 1.897  (kurang)
+  1.3   x 1.581 = 2.055  (lebih)
+  1.26  x 1.581 = 1.992  (kurang sedikit)
+  1.265 x 1.581 = 2.000  (pas)
+
+jadi 2 / 1.581 = 1.265
+```
 
 ### 11.2 Z-score untuk F
 
@@ -1883,21 +2104,92 @@ $$
 z_F(W1)=\frac{29-30.4}{1.140}=\frac{-1.4}{1.140}=-1.228
 $$
 
+Cara raw W1:
+
+```text
+29 - 30.4 = -1.4
+
+cari angka x 1.140 mendekati 1.4:
+  1.2   x 1.140 = 1.368  (kurang)
+  1.3   x 1.140 = 1.482  (lebih)
+  1.23  x 1.140 = 1.402  (lebih sedikit)
+  1.228 x 1.140 = 1.400  (pas)
+
+jadi -1.4 / 1.140 = -1.228
+```
+
 $$
 z_F(W2)=\frac{30-30.4}{1.140}=\frac{-0.4}{1.140}=-0.351
 $$
+
+Cara raw W2:
+
+```text
+30 - 30.4 = -0.4
+
+cari angka x 1.140 mendekati 0.4:
+  0.3   x 1.140 = 0.342  (kurang)
+  0.4   x 1.140 = 0.456  (lebih)
+  0.35  x 1.140 = 0.399  (kurang sedikit)
+  0.351 x 1.140 = 0.400  (pas)
+
+jadi -0.4 / 1.140 = -0.351
+```
 
 $$
 z_F(W3)=\frac{30-30.4}{1.140}=\frac{-0.4}{1.140}=-0.351
 $$
 
+Cara raw W3:
+
+```text
+30 - 30.4 = -0.4
+
+cari angka x 1.140 mendekati 0.4:
+  0.3   x 1.140 = 0.342  (kurang)
+  0.4   x 1.140 = 0.456  (lebih)
+  0.35  x 1.140 = 0.399  (kurang sedikit)
+  0.351 x 1.140 = 0.400  (pas)
+
+jadi -0.4 / 1.140 = -0.351
+```
+
 $$
 z_F(W4)=\frac{31-30.4}{1.140}=\frac{0.6}{1.140}=0.526
 $$
 
+Cara raw W4:
+
+```text
+31 - 30.4 = 0.6
+
+cari angka x 1.140 mendekati 0.6:
+  0.5   x 1.140 = 0.570  (kurang)
+  0.6   x 1.140 = 0.684  (lebih)
+  0.53  x 1.140 = 0.604  (lebih sedikit)
+  0.526 x 1.140 = 0.600  (pas)
+
+jadi 0.6 / 1.140 = 0.526
+```
+
 $$
 z_F(W5)=\frac{32-30.4}{1.140}=\frac{1.6}{1.140}=1.403
 $$
+
+Cara raw W5:
+
+```text
+32 - 30.4 = 1.6
+
+cari angka x 1.140 mendekati 1.6:
+  1.3    x 1.140 = 1.482  (kurang)
+  1.5    x 1.140 = 1.710  (lebih)
+  1.4    x 1.140 = 1.596  (kurang sedikit)
+  1.4034 x 1.140 = 1.600  (pas untuk catatan)
+
+1.4034 dibulatkan di tabel menjadi 1.403
+jadi 1.6 / 1.140 = 1.403
+```
 
 ### 11.3 Tabel z-score training
 
@@ -1982,13 +2274,111 @@ Arti simbol:
 | W4 | 0.632 | 0.526 | 0.333 |
 | W5 | 1.265 | 1.403 | 1.775 |
 
+Cara meraba perkalian tiap baris:
+
+```text
+W1:
+-1.265 x -1.228
+
+abaikan dulu tanda minusnya:
+1.265 x 1.2   = 1.518000
+1.265 x 0.028 = 0.035420
+jumlah        = 1.553420
+dibulatkan    = 1.553
+
+minus x minus -> positif
+jadi W1 = 1.553
+```
+
+```text
+W2:
+-0.632 x -0.351
+
+abaikan dulu tanda minusnya:
+0.632 x 0.35  = 0.221200
+0.632 x 0.001 = 0.000632
+jumlah        = 0.221832
+dibulatkan    = 0.222
+
+minus x minus -> positif
+jadi W2 = 0.222
+```
+
+```text
+W3:
+0.000 x -0.351
+
+0 dikali apa saja = 0
+jadi W3 = 0.000
+```
+
+```text
+W4:
+0.632 x 0.526
+
+Catatan bayi:
+di tabel z-score kita tulis 3 desimal.
+Digit belakang aslinya masih ada.
+Supaya hasilnya sama dengan catatan, pakai angka yang belum dipotong habis.
+
+0.632456 x 0.526235
+
+0.632456 x 0.5      = 0.316228
+0.632456 x 0.02     = 0.012649
+0.632456 x 0.006    = 0.003795
+0.632456 x 0.0002   = 0.000126
+0.632456 x 0.00003  = 0.000019
+0.632456 x 0.000005 = 0.000003
+jumlah              = 0.332820
+dibulatkan          = 0.333
+
+positif x positif -> positif
+jadi W4 = 0.333
+```
+
+```text
+W5:
+1.265 x 1.403
+
+1.265 x 1.4   = 1.771000
+1.265 x 0.003 = 0.003795
+jumlah        = 1.774795
+dibulatkan    = 1.775
+
+positif x positif -> positif
+jadi W5 = 1.775
+```
+
 Jumlahkan kolom terakhir:
+
+```text
+mulai dari 1.553
+
+1.553 + 0.222 = 1.775
+1.775 + 0.000 = 1.775
+1.775 + 0.333 = 2.108
+2.108 + 1.775 = 3.883
+
+jadi jumlahnya 3.883
+```
 
 $$
 \sum z_Ez_F=1.553+0.222+0.000+0.333+1.775=3.883
 $$
 
 Karena `n = 5`, maka `n - 1 = 4`.
+
+Sekarang bagi pelan-pelan:
+
+```text
+3.883 / 4
+
+4 x 0.9   = 3.6    (kurang)
+4 x 0.97  = 3.88   (kurang dikit)
+4 x 0.971 = 3.884  (pas, dibulatkan)
+
+jadi 3.883 / 4 = 0.971
+```
 
 $$
 r=\frac{3.883}{4}=0.971
@@ -2045,6 +2435,29 @@ $$
 0.707\ \text{adalah pembulatan dari}\ \frac{1}{\sqrt{2}}
 $$
 
+Cara meraba $\sqrt{2}$ dulu:
+
+```text
+cari angka yang kalau dikuadratkan jadi 2
+
+1 x 1 = 1       (kurang)
+2 x 2 = 4       (kelebihan)
+1.4 x 1.4 = 1.96      (kurang)
+1.41 x 1.41 = 1.9881  (kurang)
+1.414 x 1.414 = 1.999396  (pas dekat 2)
+
+jadi sqrt(2) kira-kira 1.414
+```
+
+Sekarang raba `1 / 1.414`:
+
+```text
+1.414 x 0.7   = 0.989800  (kurang dari 1)
+1.414 x 0.707 = 0.999698  (pas dekat 1)
+
+jadi 1 / 1.414 = 0.707
+```
+
 $$
 \frac{1}{\sqrt{2}}=0.707106\ldots
 $$
@@ -2067,6 +2480,17 @@ E rendah bersama F rendah
 
 Eigenvalue PC1:
 
+Cara meraba eigenvalue PC1:
+
+```text
+lambda_1 = 1 + r
+r = 0.971
+
+1 + 0.971 = 1.971
+
+jadi lambda_1 = 1.971
+```
+
 $$
 \lambda_1 = 1+r = 1+0.971 = 1.971
 $$
@@ -2074,6 +2498,17 @@ $$
 Arti `lambda_1 = 1.971`: PC1 menjelaskan variasi besar pada data normal. Karena total variance pada dua fitur z-score adalah kira-kira `2`, maka PC1 menjelaskan hampir semuanya.
 
 Dalam contoh dua fitur ini:
+
+Sekarang raba pembagian `1.971 / 2`:
+
+```text
+2 x 0.9    = 1.8    (kurang)
+2 x 0.98   = 1.96   (kurang dikit)
+2 x 0.985  = 1.970  (kurang tipis)
+2 x 0.9855 = 1.971  (pas)
+
+jadi 1.971 / 2 = 0.9855
+```
 
 $$
 \text{persentase variance PC1}=\frac{\lambda_1}{2}=\frac{1.971}{2}=0.9855
@@ -2132,6 +2567,48 @@ $$
 
 Hitung:
 
+Cara meraba dot product W1:
+
+```text
+t_W1 = (-1.265 x 0.707) + (-1.228 x 0.707)
+```
+
+Perkalian pertama:
+
+```text
+1.265 x 0.707
+
+1.265 x 0.7   = 0.885500
+1.265 x 0.007 = 0.008855
+jumlah        = 0.894355
+dibulatkan    = 0.894
+
+karena -1.265 tandanya negatif:
+-1.265 x 0.707 = -0.894
+```
+
+Perkalian kedua:
+
+```text
+1.228 x 0.707
+
+1.228 x 0.7   = 0.859600
+1.228 x 0.007 = 0.008596
+jumlah        = 0.868196
+dibulatkan    = 0.868
+
+karena -1.228 tandanya negatif:
+-1.228 x 0.707 = -0.868
+```
+
+Jumlahkan dua hasilnya:
+
+```text
+-0.894 + (-0.868) = -1.762
+
+jadi t_W1 = -1.762
+```
+
 $$
 t_{W1}=(-1.265)(0.707)+(-1.228)(0.707)=-0.894+(-0.868)=-1.762
 $$
@@ -2139,6 +2616,125 @@ $$
 Arti `t_W1` negatif: W1 berada di sisi rendah dari pola normal, energi rendah dan frekuensi rendah.
 
 ### 14.2 Hitung score semua window
+
+Untuk semua window, caranya sama:
+
+```text
+t = z_E x 0.707 + z_F x 0.707
+```
+
+Kita pakai hasil perkalian yang dibulatkan 3 desimal, seperti gaya tabel catatan.
+
+```text
+W1:
+
+z_E x 0.707:
+1.265 x 0.7   = 0.885500
+1.265 x 0.007 = 0.008855
+jumlah        = 0.894355
+dibulatkan    = 0.894
+tandanya negatif -> -0.894
+
+z_F x 0.707:
+1.228 x 0.7   = 0.859600
+1.228 x 0.007 = 0.008596
+jumlah        = 0.868196
+dibulatkan    = 0.868
+tandanya negatif -> -0.868
+
+jumlah t:
+-0.894 + (-0.868) = -1.762
+
+jadi t_W1 = -1.762
+```
+
+```text
+W2:
+
+z_E x 0.707:
+0.632 x 0.7   = 0.442400
+0.632 x 0.007 = 0.004424
+jumlah        = 0.446824
+dibulatkan    = 0.447
+tandanya negatif -> -0.447
+
+z_F x 0.707:
+0.351 x 0.7   = 0.245700
+0.351 x 0.007 = 0.002457
+jumlah        = 0.248157
+dibulatkan    = 0.248
+tandanya negatif -> -0.248
+
+jumlah t:
+-0.447 + (-0.248) = -0.695
+
+jadi t_W2 = -0.695
+```
+
+```text
+W3:
+
+z_E x 0.707:
+0.000 x 0.707 = 0.000
+
+z_F x 0.707:
+0.351 x 0.7   = 0.245700
+0.351 x 0.007 = 0.002457
+jumlah        = 0.248157
+dibulatkan    = 0.248
+tandanya negatif -> -0.248
+
+jumlah t:
+0.000 + (-0.248) = -0.248
+
+jadi t_W3 = -0.248
+```
+
+```text
+W4:
+
+z_E x 0.707:
+0.632 x 0.7   = 0.442400
+0.632 x 0.007 = 0.004424
+jumlah        = 0.446824
+dibulatkan    = 0.447
+tandanya positif -> 0.447
+
+z_F x 0.707:
+0.526 x 0.7   = 0.368200
+0.526 x 0.007 = 0.003682
+jumlah        = 0.371882
+dibulatkan    = 0.372
+tandanya positif -> 0.372
+
+jumlah t:
+0.447 + 0.372 = 0.819
+
+jadi t_W4 = 0.819
+```
+
+```text
+W5:
+
+z_E x 0.707:
+1.265 x 0.7   = 0.885500
+1.265 x 0.007 = 0.008855
+jumlah        = 0.894355
+dibulatkan    = 0.894
+tandanya positif -> 0.894
+
+z_F x 0.707:
+1.403 x 0.7   = 0.982100
+1.403 x 0.007 = 0.009821
+jumlah        = 0.991921
+dibulatkan    = 0.992
+tandanya positif -> 0.992
+
+jumlah t:
+0.894 + 0.992 = 1.886
+
+jadi t_W5 = 1.886
+```
 
 | Window | $z_E$ | $z_F$ | Perhitungan t | t |
 |---:|---:|---:|---|---:|
@@ -2197,7 +2793,16 @@ $$
 t_{W1}=-1.762,\quad p_1=[0.707,0.707]
 $$
 
-Hitung:
+Hitung pelan. Karena dua loading sama-sama `0.707`, hitung satu kali dulu.
+
+```text
+1.762 x 0.7   = 1.2334
+1.762 x 0.007 = 0.012334
+jumlah        = 1.245734
+dibulatkan    = 1.246
+```
+
+Karena score-nya negatif, hasilnya ikut negatif:
 
 $$
 \hat z_{W1}=-1.762[0.707,0.707]=[-1.246,-1.246]
@@ -2231,6 +2836,22 @@ $$
 z_{W1}=[-1.265,-1.228],\quad \hat z_{W1}=[-1.246,-1.246]
 $$
 
+Hitung residual satu-satu, jangan lompat.
+
+```text
+e_E = z_E - z_hat_E
+    = -1.265 - (-1.246)
+    = -1.265 + 1.246
+    = -0.019
+
+e_F = z_F - z_hat_F
+    = -1.228 - (-1.246)
+    = -1.228 + 1.246
+    = 0.018
+```
+
+Jadi:
+
 $$
 e_{W1}=z_{W1}-\hat z_{W1}=[-1.265,-1.228]-[-1.246,-1.246]=[-0.019,0.018]
 $$
@@ -2238,6 +2859,66 @@ $$
 Residual W1 kecil. Artinya W1 cocok dengan garis PC1.
 
 ### 15.3 Rekonstruksi dan residual semua window
+
+Cara ngisi tabelnya sama: hitung dulu $\hat z=t\cdot0.707$, lalu residual $e=z-\hat z$.
+
+```text
+W1 z_hat:
+1.762 x 0.7   = 1.2334
+1.762 x 0.007 = 0.012334
+jumlah        = 1.245734 -> 1.246
+karena t negatif, z_hat = -1.246
+
+W1 residual:
+e_E = -1.265 - (-1.246) = -0.019
+e_F = -1.228 - (-1.246) =  0.018
+```
+
+```text
+W2 z_hat:
+0.695 x 0.7   = 0.4865
+0.695 x 0.007 = 0.004865
+jumlah        = 0.491365 -> 0.491
+karena t negatif, z_hat = -0.491
+
+W2 residual:
+e_E = -0.632 - (-0.491) = -0.141
+e_F = -0.351 - (-0.491) =  0.140
+```
+
+```text
+W3 z_hat:
+0.248 x 0.7   = 0.1736
+0.248 x 0.007 = 0.001736
+jumlah        = 0.175336 -> 0.175
+karena t negatif, z_hat = -0.175
+
+W3 residual:
+e_E =  0.000 - (-0.175) =  0.175
+e_F = -0.351 - (-0.175) = -0.176
+```
+
+```text
+W4 z_hat:
+0.819 x 0.7   = 0.5733
+0.819 x 0.007 = 0.005733
+jumlah        = 0.579033 -> 0.579
+
+W4 residual:
+e_E = 0.632 - 0.579 =  0.053
+e_F = 0.526 - 0.579 = -0.053
+```
+
+```text
+W5 z_hat:
+1.886 x 0.7   = 1.3202
+1.886 x 0.007 = 0.013202
+jumlah        = 1.333402 -> 1.333
+
+W5 residual:
+e_E = 1.265 - 1.333 = -0.068
+e_F = 1.403 - 1.333 =  0.070
+```
 
 | Window | t | z_hat_E | z_hat_F | e_E = z_E - z_hat_E | e_F = z_F - z_hat_F |
 |---:|---:|---:|---:|---:|---:|
@@ -2331,13 +3012,115 @@ $$
 t_{W1}=-1.762,\quad \lambda_1=1.971
 $$
 
-Hitung:
+Hitung kuadrat score dulu.
+
+```text
+1.762 x 1.762
+
+1.762 x 1     = 1.762
+1.762 x 0.7   = 1.2334
+1.762 x 0.06  = 0.10572
+1.762 x 0.002 = 0.003524
+jumlah        = 3.104644
+dibulatkan    = 3.105
+```
+
+Jadi:
+
+$$
+(-1.762)^2=3.105
+$$
+
+Sekarang bagi dengan $\lambda_1=1.971$. Kita meraba hasil bagi.
+
+```text
+1.971 x 1.5   = 2.9565 (kurang)
+1.971 x 1.6   = 3.1536 (lebih)
+1.971 x 1.57  = 3.09447 (kurang dikit)
+1.971 x 1.575 = 3.104325 (pas, dibulatkan)
+jadi 3.105 / 1.971 = 1.575
+```
+
+Maka:
 
 $$
 T^2_{W1}=\frac{(-1.762)^2}{1.971}=\frac{3.105}{1.971}=1.575
 $$
 
 ### 16.2 T2 semua window training
+
+Cara ngisi tabel: kuadratkan $t$, lalu bagi dengan `1.971`.
+
+```text
+W1:
+t^2 = 1.762 x 1.762 = 3.104644 -> 3.105
+
+1.971 x 1.5   = 2.9565 (kurang)
+1.971 x 1.6   = 3.1536 (lebih)
+1.971 x 1.575 = 3.104325 (pas, dibulatkan)
+T2 = 3.105 / 1.971 = 1.575
+```
+
+```text
+W2:
+0.695 x 0.695
+
+0.695 x 0.6   = 0.417
+0.695 x 0.09  = 0.06255
+0.695 x 0.005 = 0.003475
+jumlah        = 0.483025 -> 0.483
+
+1.971 x 0.2   = 0.3942 (kurang)
+1.971 x 0.3   = 0.5913 (lebih)
+1.971 x 0.24  = 0.47304 (kurang)
+1.971 x 0.245 = 0.482895 (pas, dibulatkan)
+T2 = 0.483 / 1.971 = 0.245
+```
+
+```text
+W3:
+0.248 x 0.248
+
+0.248 x 0.2   = 0.0496
+0.248 x 0.04  = 0.00992
+0.248 x 0.008 = 0.001984
+jumlah        = 0.061504 -> 0.062
+
+1.971 x 0.03  = 0.05913 (kurang)
+1.971 x 0.032 = 0.063072 (lebih)
+1.971 x 0.031 = 0.061101 (pas, dibulatkan)
+T2 = 0.062 / 1.971 = 0.031
+```
+
+```text
+W4:
+0.819 x 0.819
+
+0.819 x 0.8   = 0.6552
+0.819 x 0.019 = 0.015561
+jumlah        = 0.670761 -> 0.671
+
+1.971 x 0.3  = 0.5913 (kurang)
+1.971 x 0.4  = 0.7884 (lebih)
+1.971 x 0.34 = 0.67014 (pas, dibulatkan)
+T2 = 0.671 / 1.971 = 0.340
+```
+
+```text
+W5:
+1.886 x 1.886
+
+1.886 x 1     = 1.886
+1.886 x 0.8   = 1.5088
+1.886 x 0.08  = 0.15088
+1.886 x 0.006 = 0.011316
+jumlah        = 3.556996 -> 3.557
+
+1.971 x 1.8   = 3.5478 (kurang)
+1.971 x 1.81  = 3.56751 (lebih)
+1.971 x 1.805 = 3.557655 (pas, dibulatkan)
+T2 = 3.557 / 1.971 = 1.805
+```
 
 | Window | $t$ | $t^2$ | $T^2=t^2/1.971$ |
 |---:|---:|---:|---:|
@@ -2436,7 +3219,34 @@ $$
 e_E=-0.019,\quad e_F=0.018
 $$
 
-Hitung:
+Hitung kuadrat residual satu-satu.
+
+```text
+0.019 x 0.019
+
+0.019 x 0.01  = 0.00019
+0.019 x 0.009 = 0.000171
+jumlah        = 0.000361
+```
+
+```text
+0.018 x 0.018
+
+0.018 x 0.01  = 0.00018
+0.018 x 0.008 = 0.000144
+jumlah        = 0.000324
+```
+
+Jumlahkan:
+
+```text
+0.000361
+0.000324
+--------
+0.000685
+```
+
+Jadi:
 
 $$
 Q_{W1}=(-0.019)^2+(0.018)^2=0.000361+0.000324=0.000685
@@ -2449,6 +3259,87 @@ Q_{W1}=0.001
 $$
 
 ### 17.2 Q semua window training
+
+Cara ngisi tabel: kuadratkan residual E, kuadratkan residual F, lalu jumlahkan.
+
+```text
+W1:
+0.019^2 = 0.000361
+0.018^2 = 0.000324
+Q       = 0.000361 + 0.000324
+        = 0.000685 -> 0.001
+```
+
+```text
+W2:
+0.141 x 0.141
+
+0.141 x 0.1   = 0.0141
+0.141 x 0.04  = 0.00564
+0.141 x 0.001 = 0.000141
+jumlah        = 0.019881 -> 0.020
+
+0.140 x 0.140
+
+0.140 x 0.1  = 0.014
+0.140 x 0.04 = 0.0056
+jumlah       = 0.019600 -> 0.020
+
+Q = 0.019881 + 0.019600
+  = 0.039481
+di tabel bayi, komponen dibulatkan jadi 0.020 + 0.020 = 0.040
+jadi Q yang dipakai note = 0.040 (dibulatkan)
+```
+
+```text
+W3:
+0.175 x 0.175
+
+0.175 x 0.1   = 0.0175
+0.175 x 0.07  = 0.01225
+0.175 x 0.005 = 0.000875
+jumlah        = 0.030625 -> 0.031
+
+0.176 x 0.176
+
+0.176 x 0.1   = 0.0176
+0.176 x 0.07  = 0.01232
+0.176 x 0.006 = 0.001056
+jumlah        = 0.030976 -> 0.031
+
+Q = 0.030625 + 0.030976
+  = 0.061601 -> 0.062
+```
+
+```text
+W4:
+0.053 x 0.053
+
+0.053 x 0.05  = 0.00265
+0.053 x 0.003 = 0.000159
+jumlah        = 0.002809 -> 0.003
+
+0.053 x 0.053 = 0.002809 -> 0.003
+
+Q = 0.002809 + 0.002809
+  = 0.005618 -> 0.006
+```
+
+```text
+W5:
+0.068 x 0.068
+
+0.068 x 0.06  = 0.00408
+0.068 x 0.008 = 0.000544
+jumlah        = 0.004624 -> 0.005
+
+0.070 x 0.070
+
+0.070 x 0.07 = 0.004900 -> 0.005
+
+Q = 0.004624 + 0.004900
+  = 0.009524 -> 0.010
+```
 
 | Window | $e_E$ | $e_F$ | $e_E^2$ | $e_F^2$ | $Q/\mathrm{SPE}$ |
 |---:|---:|---:|---:|---:|---:|
@@ -2568,8 +3459,32 @@ T2 training:
 
 Nilai terbesar:
 
+Kita tidak hitung berat. Kita cuma bandingkan satu-satu, lalu ambil yang paling besar.
+
+```text
+mulai dari W1 = 1.575
+
+bandingkan W2:
+0.245 lebih kecil dari 1.575
+jadi pegangan tetap 1.575
+
+bandingkan W3:
+0.031 lebih kecil dari 1.575
+jadi pegangan tetap 1.575
+
+bandingkan W4:
+0.340 lebih kecil dari 1.575
+jadi pegangan tetap 1.575
+
+bandingkan W5:
+1.805 lebih besar dari 1.575
+jadi pegangan ganti ke 1.805
+
+nilai terbesar = 1.805
+```
+
 $$
-\text{threshold}_{T^2}=1.805
+\text{threshold}_{T^2}=\max(1.575,0.245,0.031,0.340,1.805)=1.805
 $$
 
 ### 18.2 Ambang Q
@@ -2586,8 +3501,32 @@ Q training:
 
 Nilai terbesar:
 
+Ini juga cuma bandingkan lalu ambil terbesar.
+
+```text
+mulai dari W1 = 0.001
+
+bandingkan W2:
+0.040 lebih besar dari 0.001
+jadi pegangan ganti ke 0.040
+
+bandingkan W3:
+0.062 lebih besar dari 0.040
+jadi pegangan ganti ke 0.062
+
+bandingkan W4:
+0.006 lebih kecil dari 0.062
+jadi pegangan tetap 0.062
+
+bandingkan W5:
+0.010 lebih kecil dari 0.062
+jadi pegangan tetap 0.062
+
+nilai terbesar = 0.062
+```
+
 $$
-\text{threshold}_Q=0.062
+\text{threshold}_Q=\max(0.001,0.040,0.062,0.006,0.010)=0.062
 $$
 
 ### 18.3 Catatan threshold untuk proyek nyata
@@ -2715,11 +3654,42 @@ Pakai mean dan standar deviasi training. Jangan hitung baru.
 
 Untuk E:
 
+Kurangi dulu.
+
+```text
+14 - 10 = 4
+```
+
+Lalu raba pembagian `4 / 1.581`.
+
+```text
+1.581 x 2.5  = 3.953 (kurang)
+1.581 x 2.53 = 4.000 (pas)
+jadi 4 / 1.581 = 2.530
+```
+
 $$
 z_E=\frac{E_{\text{new}}-\mu_E}{s_E}=\frac{14-10}{1.581}=\frac{4}{1.581}=2.530
 $$
 
 Untuk F:
+
+Kurangi dulu.
+
+```text
+30 - 30.4 = -0.4
+```
+
+Raba pembagian `0.4 / 1.140` dulu, tanda minus dipasang belakangan.
+
+```text
+1.140 x 0.35  = 0.399 (kurang sedikit)
+1.140 x 0.351 = 0.400 (pas)
+jadi 0.4 / 1.140 = 0.351
+
+karena atasnya -0.4,
+maka -0.4 / 1.140 = -0.351
+```
 
 $$
 z_F=\frac{F_{\text{new}}-\mu_F}{s_F}=\frac{30-30.4}{1.140}=\frac{-0.4}{1.140}=-0.351
@@ -2750,6 +3720,43 @@ $$
 
 Dengan angka:
 
+Pecah perkalian pertama.
+
+```text
+2.530 x 0.707
+= 2.530 x (0.700 + 0.007)
+
+2.530 x 0.700 = 1.771
+2.530 x 0.007 = 0.018
+
+running:
+1.771 + 0.018 = 1.789
+```
+
+Pecah perkalian kedua.
+
+```text
+-0.351 x 0.707
+= -(0.351 x 0.707)
+= -(0.351 x (0.700 + 0.007))
+
+0.351 x 0.700 = 0.246
+0.351 x 0.007 = 0.002
+
+running:
+0.246 + 0.002 = 0.248
+
+karena tadi negatif:
+-0.351 x 0.707 = -0.248
+```
+
+Jumlahkan pelan-pelan.
+
+```text
+t_new = 1.789 + (-0.248)
+t_new = 1.541
+```
+
 $$
 t_{\text{new}}=(2.530)(0.707)+(-0.351)(0.707)=1.789+(-0.248)=1.541
 $$
@@ -2766,11 +3773,38 @@ $$
 
 Hitung:
 
+Kuadratkan dulu `1.541`.
+
+```text
+1.541^2 = 1.541 x 1.541
+1.541 x 1.500 = 2.312
+1.541 x 0.041 = 0.063
+
+running:
+2.312 + 0.063 = 2.375
+```
+
+Lalu raba pembagian `2.375 / 1.971`.
+
+```text
+1.971 x 1.2   = 2.365 (kurang)
+1.971 x 1.205 = 2.375 (pas)
+jadi 2.375 / 1.971 = 1.205
+```
+
 $$
 T^2_{\text{new}}=\frac{(1.541)^2}{1.971}=\frac{2.375}{1.971}=1.205
 $$
 
 Bandingkan dengan threshold:
+
+```text
+T2 baru      = 1.205
+threshold T2 = 1.805
+
+1.205 lebih kecil dari 1.805
+jadi 1.205 > 1.805 adalah False
+```
 
 $$
 T^2_{\text{new}}=1.205,\quad \text{threshold}_{T^2}=1.805
@@ -2792,6 +3826,21 @@ $$
 
 Hitung:
 
+Kedua komponen dikali angka PC1 yang sama.
+
+```text
+1.541 x 0.707
+= 1.541 x (0.700 + 0.007)
+
+1.541 x 0.700 = 1.079
+1.541 x 0.007 = 0.011
+
+running:
+1.079 + 0.011 = 1.090 (dibulatkan)
+```
+
+Jadi komponen pertama `1.090`, komponen kedua juga `1.090`.
+
 $$
 \hat z_{\text{new}}=1.541[0.707,0.707]=[1.090,1.090]
 $$
@@ -2807,6 +3856,24 @@ e_{\text{new}}=z_{\text{new}}-\hat z_{\text{new}}
 $$
 
 Hitung:
+
+Kurangi komponen E.
+
+```text
+e_E = z_E - z_hat_E
+e_E = 2.530 - 1.090
+e_E = 1.440
+```
+
+Kurangi komponen F.
+
+```text
+e_F = z_F - z_hat_F
+e_F = -0.351 - 1.090
+e_F = -1.441
+```
+
+Jadi:
 
 $$
 e_{\text{new}}=[2.530,-0.351]-[1.090,1.090]=[2.530-1.090,-0.351-1.090]=[1.440,-1.441]
@@ -2824,11 +3891,54 @@ $$
 
 Hitung:
 
+Kuadratkan residual E.
+
+```text
+1.440^2 = 1.440 x 1.440
+1.440 x 1.000 = 1.440
+1.440 x 0.400 = 0.576
+1.440 x 0.040 = 0.058
+
+running:
+1.440 + 0.576 = 2.016
+2.016 + 0.058 = 2.074
+```
+
+Kuadratkan residual F. Tanda minus hilang kalau dikuadratkan.
+
+```text
+(-1.441)^2 = 1.441 x 1.441
+1.441 x 1.000 = 1.441
+1.441 x 0.400 = 0.576
+1.441 x 0.040 = 0.058
+1.441 x 0.001 = 0.001
+
+running:
+1.441 + 0.576 = 2.017
+2.017 + 0.058 = 2.075
+2.075 + 0.001 = 2.076
+```
+
+Jumlahkan Q pelan-pelan.
+
+```text
+Q_new = 2.074 + 2.076
+Q_new = 4.150
+```
+
 $$
 Q_{\text{new}}=(1.440)^2+(-1.441)^2=2.074+2.076=4.150
 $$
 
 Bandingkan dengan threshold:
+
+```text
+Q baru      = 4.150
+threshold Q = 0.062
+
+4.150 lebih besar dari 0.062
+jadi 4.150 > 0.062 adalah True
+```
 
 $$
 Q_{\text{new}}=4.150,\quad \text{threshold}_Q=0.062
@@ -2851,6 +3961,19 @@ $$
 Kita memakai $>$, bukan $\ge$. Jadi kata "melewati threshold" berarti lebih besar dari threshold, bukan sama dengan threshold.
 
 Masukkan angka:
+
+```text
+cabang T2:
+1.205 > 1.805
+ini False
+
+cabang Q:
+4.150 > 0.062
+ini True
+
+aturan OR:
+False OR True = True
+```
 
 $$
 \mathrm{is\_anomaly}=(1.205>1.805)\ \mathrm{OR}\ (4.150>0.062)=\mathrm{False}\ \mathrm{OR}\ \mathrm{True}=\mathrm{True}
@@ -2877,13 +4000,45 @@ Arti simbol:
 
 Hitung:
 
+Raba dulu skor T2, yaitu `1.205 / 1.805`.
+
+```text
+1.805 x 0.6    = 1.083 (kurang)
+1.805 x 0.66   = 1.191 (kurang)
+1.805 x 0.6676 = 1.205 (pas)
+
+jadi 1.205 / 1.805 = 0.6676
+dibulatkan tiga desimal = 0.668
+```
+
 $$
 \frac{T^2_{\text{new}}}{\text{threshold}_{T^2}}=\frac{1.205}{1.805}=0.668
 $$
 
+Raba skor Q, yaitu `4.150 / 0.062`.
+
+```text
+0.062 x 66     = 4.092 (kurang)
+0.062 x 67     = 4.154 (lebih)
+0.062 x 66.9   = 4.148 (kurang sedikit)
+0.062 x 66.935 = 4.150 (pas)
+
+jadi 4.150 / 0.062 = 66.935
+```
+
 $$
 \frac{Q_{\text{new}}}{\text{threshold}_Q}=\frac{4.150}{0.062}=66.935
 $$
+
+Sekarang ambil yang paling besar.
+
+```text
+score_T2 = 0.668
+score_Q  = 66.935
+
+66.935 lebih besar dari 0.668
+jadi score = 66.935
+```
 
 $$
 \text{score}=\max(0.668,66.935)=66.935
@@ -4004,11 +5159,1132 @@ bukan >=
 
 PCA T2/Q spectral pada PDAM Pump Sentinel membaca window telemetry yang sudah diringkas menjadi fitur spektral. Fitur tersebut di-scaling memakai statistik normal training, lalu diproyeksikan ke subspace PCA. Hotelling T2 mengukur jarak window di arah principal component yang disimpan, sedangkan Q atau SPE mengukur jumlah kuadrat residual yang tidak bisa direkonstruksi oleh PCA. Window dianggap anomali jika T2 atau Q lebih besar dari threshold yang dikalibrasi dari data normal. Pada proyek ini, SKAB dipakai sebagai surrogate water circulation testbed untuk pembelajaran dan demo akademik, bukan sebagai data operasional PDAM nyata.
 
-## Bagian 29. Latihan mandiri kecil
+## Bagian 29. Menghitung bareng dari awal sampai vonis
 
-Kalau ingin memastikan kamu benar-benar paham, coba latihan ini di kertas. Jangan buka jawaban dari contoh utama saat mengerjakan.
+Contoh utama di Bagian 10 sampai 19 ditulis sambil mengajar konsep, jadi terasa banyak teori di antara angka. Bagian ini berbeda. Di sini kita tidak menjelaskan konsep lagi. Kita hanya duduk bersama, ambil satu soal baru, lalu mengerjakannya berurutan sampai keluar keputusan.
 
-### 29.1 Data latihan
+Anggap ini seperti memasak sambil ditemani. Satu langkah, satu hasil. Jangan lompat.
+
+Aturan main bagian ini:
+
+| Aturan | Maksud |
+|---|---|
+| ikuti urut dari atas ke bawah | jangan lompat langkah |
+| satu langkah, satu angka | tulis hasil tiap langkah di kertas |
+| rumus lihat cheat sheet Bagian 28 | tidak usah menghafal, cukup ikuti |
+| statistik training tidak dihitung ulang saat inference | pakai mean dan standar deviasi training |
+
+Pembulatan sama seperti Bagian 10.0, yaitu tiga desimal. Kadang hasil tangan beda satu digit terakhir karena pembulatan. Itu wajar, jangan panik.
+
+Data baru yang kita kerjakan bersama. Lima window normal, dua fitur:
+
+| Window normal | E energi band | F frekuensi dominan |
+|---:|---:|---:|
+| W1 | 20 | 40 |
+| W2 | 21 | 42 |
+| W3 | 22 | 43 |
+| W4 | 23 | 44 |
+| W5 | 24 | 46 |
+
+Window baru yang akan diuji nanti:
+
+| Window baru | E | F |
+|---|---:|---:|
+| X_new | 26 | 42 |
+
+Rasa awal: energi `E` naik tinggi ke `26`, tetapi frekuensi `F` hanya `42`, tidak ikut naik tinggi. Kalau pola normal naik bersama, ini calon anomali yang akan ditangkap Q. Kita buktikan dengan hitungan, bukan dengan tebakan.
+
+### 29.0 Rumus dasar yang dipakai
+
+Semua rumus untuk sepuluh langkah di bawah dikumpulkan di sini, jadi kamu tidak perlu scroll ke atas. Untuk contoh ini: jumlah window `n = 5`, jadi `n - 1 = 4`, dan ada dua fitur yaitu `E` dan `F`.
+
+Bekal dasar tiap fitur:
+
+$$
+\mu=\frac{\mathrm{sum}}{n},\quad d=x-\mu,\quad s^2=\frac{\sum d^2}{n-1},\quad s=\sqrt{s^2}
+$$
+
+$$
+z=\frac{x-\mu}{s}
+$$
+
+Pola normal dari dua fitur:
+
+$$
+r=\frac{\sum_{i=1}^{n} z_{E,i}\,z_{F,i}}{n-1},\quad S=\begin{bmatrix}1 & r \\ r & 1\end{bmatrix}
+$$
+
+$$
+p_1=[0.707,0.707],\quad \lambda_1=1+r
+$$
+
+Skor tiap window:
+
+$$
+t=z_E(0.707)+z_F(0.707)
+$$
+
+$$
+\hat z_E=t(0.707),\quad \hat z_F=t(0.707)
+$$
+
+$$
+e_E=z_E-\hat z_E,\quad e_F=z_F-\hat z_F
+$$
+
+$$
+T^2=\frac{t^2}{\lambda_1},\quad Q=e_E^2+e_F^2
+$$
+
+Ambang dan vonis:
+
+$$
+\text{threshold}_{T^2}=\max(T^2\ \text{training}),\quad \text{threshold}_Q=\max(Q\ \text{training})
+$$
+
+$$
+\mathrm{is\_anomaly}=(T^2>\text{threshold}_{T^2})\ \mathrm{OR}\ (Q>\text{threshold}_Q)
+$$
+
+$$
+\text{score}=\max\left(\frac{T^2}{\text{threshold}_{T^2}},\frac{Q}{\text{threshold}_Q}\right)
+$$
+
+Arti simbol singkat:
+
+| Simbol | Arti |
+|---|---|
+| $n$ | jumlah window training, di sini 5 |
+| $x$ | nilai fitur mentah |
+| $\mu$ | mean fitur dari training normal |
+| $s$ | standar deviasi fitur dari training normal |
+| $z$ | nilai fitur setelah z-score |
+| $r$ | correlation antara z_E dan z_F |
+| $p_1$ | arah PC1, di sini `[0.707, 0.707]` |
+| $\lambda_1$ | eigenvalue PC1 |
+| $t$ | score window pada PC1 |
+| $\hat z$ | rekonstruksi z dari PC1 |
+| $e$ | residual, yaitu `z - z_hat` |
+| $T^2$ | Hotelling T2 |
+| $Q$ | Q atau SPE, jumlah kuadrat residual |
+
+Catatan: `0.707` adalah bentuk pendek dari `1 / sqrt(2)`. Untuk vonis pakai tanda `>`, bukan `>=`.
+
+### 29.1 Langkah 1: mean dan standar deviasi training
+
+Fitur E. Data `20, 21, 22, 23, 24`.
+
+Kita jumlah dulu pelan-pelan, seperti menghitung kelereng.
+
+```text
+mulai 0
+0 + 20 = 20
+20 + 21 = 41
+41 + 22 = 63
+63 + 23 = 86
+86 + 24 = 110
+```
+
+$$
+\mathrm{sum}_E=20+21+22+23+24=110
+$$
+
+Sekarang bagi ke 5 data.
+
+```text
+110 / 5
+
+20 x 5 = 100 (kurang)
+23 x 5 = 115 (lebih)
+22 x 5 = 110 (pas)
+
+jadi 110 / 5 = 22
+```
+
+$$
+\mu_E=\frac{110}{5}=22
+$$
+
+Deviation dan kuadratnya:
+
+| Window | E | $d_E=E-22$ | cara kuadrat | $d_E^2$ |
+|---:|---:|---:|---|---:|
+| W1 | 20 | -2 | $(-2)(-2)=4$ | 4 |
+| W2 | 21 | -1 | $(-1)(-1)=1$ | 1 |
+| W3 | 22 | 0 | $(0)(0)=0$ | 0 |
+| W4 | 23 | 1 | $(1)(1)=1$ | 1 |
+| W5 | 24 | 2 | $(2)(2)=4$ | 4 |
+
+Jumlah kuadratnya jangan lompat.
+
+```text
+mulai 0
+0 + 4 = 4
+4 + 1 = 5
+5 + 0 = 5
+5 + 1 = 6
+6 + 4 = 10
+```
+
+$$
+\sum d_E^2=4+1+0+1+4=10
+$$
+
+Sekarang variance sample. Karena data normal ada 5, pembaginya `5 - 1 = 4`.
+
+```text
+10 / 4
+
+2 x 4 = 8 (kurang)
+3 x 4 = 12 (lebih)
+2.5 x 4 = 10 (pas)
+
+jadi 10 / 4 = 2.5
+```
+
+Akar dari `2.5` kita raba dengan kuadrat.
+
+```text
+1^2 = 1 (kurang)
+2^2 = 4 (lebih)
+1.5^2 = 2.25 (kurang)
+1.58^2 = 2.4964 (kurang sedikit)
+1.581^2 = 2.499561 (pas 3 desimal ke 2.5)
+
+jadi sqrt(2.5) = 1.581
+```
+
+$$
+s_E^2=\frac{10}{4}=2.5,\quad s_E=\sqrt{2.5}=1.581
+$$
+
+Fitur F. Data `40, 42, 43, 44, 46`.
+
+Jumlahkan dulu.
+
+```text
+mulai 0
+0 + 40 = 40
+40 + 42 = 82
+82 + 43 = 125
+125 + 44 = 169
+169 + 46 = 215
+```
+
+$$
+\mathrm{sum}_F=40+42+43+44+46=215
+$$
+
+Bagi ke 5 data.
+
+```text
+215 / 5
+
+40 x 5 = 200 (kurang)
+44 x 5 = 220 (lebih)
+43 x 5 = 215 (pas)
+
+jadi 215 / 5 = 43
+```
+
+$$
+\mu_F=\frac{215}{5}=43
+$$
+
+| Window | F | $d_F=F-43$ | cara kuadrat | $d_F^2$ |
+|---:|---:|---:|---|---:|
+| W1 | 40 | -3 | $(-3)(-3)=9$ | 9 |
+| W2 | 42 | -1 | $(-1)(-1)=1$ | 1 |
+| W3 | 43 | 0 | $(0)(0)=0$ | 0 |
+| W4 | 44 | 1 | $(1)(1)=1$ | 1 |
+| W5 | 46 | 3 | $(3)(3)=9$ | 9 |
+
+Jumlah kuadratnya:
+
+```text
+mulai 0
+0 + 9 = 9
+9 + 1 = 10
+10 + 0 = 10
+10 + 1 = 11
+11 + 9 = 20
+```
+
+$$
+\sum d_F^2=9+1+0+1+9=20
+$$
+
+Variance sample:
+
+```text
+20 / 4
+
+4 x 4 = 16 (kurang)
+6 x 4 = 24 (lebih)
+5 x 4 = 20 (pas)
+
+jadi 20 / 4 = 5
+```
+
+Akar dari `5` kita raba juga.
+
+```text
+2^2 = 4 (kurang)
+3^2 = 9 (lebih)
+2.2^2 = 4.84 (kurang)
+2.23^2 = 4.9729 (kurang)
+2.236^2 = 4.999696 (pas 3 desimal ke 5)
+
+jadi sqrt(5) = 2.236
+```
+
+$$
+s_F^2=\frac{20}{4}=5,\quad s_F=\sqrt{5}=2.236
+$$
+
+Simpan dulu:
+
+| Fitur | Mean | Standar deviasi |
+|---|---:|---:|
+| E | 22 | 1.581 |
+| F | 43 | 2.236 |
+
+### 29.2 Langkah 2: ubah jadi z-score
+
+Rumus `z = (x - mu) / s`. Pakai mean dan standar deviasi training tadi.
+
+Untuk fitur E, pembilangnya adalah `E - 22`.
+
+```text
+W1: (20 - 22) / 1.581 = -2 / 1.581
+
+1 x 1.581 = 1.581 (kurang)
+2 x 1.581 = 3.162 (lebih)
+1.265 x 1.581 = 1.999965 (pas ke 2.000)
+
+jadi -2 / 1.581 = -1.265
+```
+
+```text
+W2: (21 - 22) / 1.581 = -1 / 1.581
+
+0.632 x 1.581 = 0.999192 (kurang)
+0.633 x 1.581 = 1.000773 (lebih)
+0.63251 x 1.581 = 0.999998 (pas ke 1.000)
+
+jadi -1 / 1.581 = -0.633
+```
+
+```text
+W3: (22 - 22) / 1.581 = 0 / 1.581 = 0.000
+```
+
+```text
+W4: (23 - 22) / 1.581 = 1 / 1.581
+
+0.632 x 1.581 = 0.999192 (kurang)
+0.633 x 1.581 = 1.000773 (lebih)
+0.63251 x 1.581 = 0.999998 (pas ke 1.000)
+
+jadi 1 / 1.581 = 0.633
+```
+
+```text
+W5: (24 - 22) / 1.581 = 2 / 1.581
+
+1 x 1.581 = 1.581 (kurang)
+2 x 1.581 = 3.162 (lebih)
+1.265 x 1.581 = 1.999965 (pas ke 2.000)
+
+jadi 2 / 1.581 = 1.265
+```
+
+Untuk fitur F, pembilangnya adalah `F - 43`.
+
+```text
+W1: (40 - 43) / 2.236 = -3 / 2.236
+
+1 x 2.236 = 2.236 (kurang)
+2 x 2.236 = 4.472 (lebih)
+1.34168 x 2.236 = 2.999996 (pas ke 3.000)
+
+jadi -3 / 2.236 = -1.342
+```
+
+```text
+W2: (42 - 43) / 2.236 = -1 / 2.236
+
+0.44 x 2.236 = 0.98384 (kurang)
+0.45 x 2.236 = 1.0062 (lebih)
+0.44723 x 2.236 = 1.000006 (pas ke 1.000)
+
+jadi -1 / 2.236 = -0.447
+```
+
+```text
+W3: (43 - 43) / 2.236 = 0 / 2.236 = 0.000
+```
+
+```text
+W4: (44 - 43) / 2.236 = 1 / 2.236
+
+0.44 x 2.236 = 0.98384 (kurang)
+0.45 x 2.236 = 1.0062 (lebih)
+0.44723 x 2.236 = 1.000006 (pas ke 1.000)
+
+jadi 1 / 2.236 = 0.447
+```
+
+```text
+W5: (46 - 43) / 2.236 = 3 / 2.236
+
+1 x 2.236 = 2.236 (kurang)
+2 x 2.236 = 4.472 (lebih)
+1.34168 x 2.236 = 2.999996 (pas ke 3.000)
+
+jadi 3 / 2.236 = 1.342
+```
+
+| Window | E | $z_E=(E-22)/1.581$ | F | $z_F=(F-43)/2.236$ |
+|---:|---:|---:|---:|---:|
+| W1 | 20 | -1.265 | 40 | -1.342 |
+| W2 | 21 | -0.633 | 42 | -0.447 |
+| W3 | 22 | 0.000 | 43 | 0.000 |
+| W4 | 23 | 0.633 | 44 | 0.447 |
+| W5 | 24 | 1.265 | 46 | 1.342 |
+
+Cek cepat: rata-rata tiap kolom z mendekati 0. Aman.
+
+### 29.3 Langkah 3: correlation r
+
+Kalikan `z_E * z_F` tiap baris, lalu jumlahkan.
+
+Untuk W1 dan W5, angkanya sama besar. Tanda negatif kali negatif menjadi positif.
+
+```text
+1.265 x 1.342
+= 1.265 x (1 + 0.3 + 0.04 + 0.002)
+= 1.265 + 0.3795 + 0.0506 + 0.00253
+= 1.69763
+= 1.698
+```
+
+Untuk W2 dan W4, angkanya juga sama besar.
+
+```text
+0.633 x 0.447
+= 0.633 x (0.4 + 0.04 + 0.007)
+= 0.2532 + 0.02532 + 0.004431
+= 0.282951
+= 0.283
+```
+
+Untuk W3, semuanya nol.
+
+```text
+0.000 x 0.000 = 0.000
+```
+
+| Window | $z_E$ | $z_F$ | $z_Ez_F$ |
+|---:|---:|---:|---:|
+| W1 | -1.265 | -1.342 | 1.698 |
+| W2 | -0.633 | -0.447 | 0.283 |
+| W3 | 0.000 | 0.000 | 0.000 |
+| W4 | 0.633 | 0.447 | 0.283 |
+| W5 | 1.265 | 1.342 | 1.698 |
+
+Jumlahkan sambil jalan.
+
+```text
+mulai 0
+0 + 1.698 = 1.698
+1.698 + 0.283 = 1.981
+1.981 + 0.000 = 1.981
+1.981 + 0.283 = 2.264
+2.264 + 1.698 = 3.962
+```
+
+$$
+\sum z_Ez_F=1.698+0.283+0.000+0.283+1.698=3.962
+$$
+
+Sekarang bagi dengan `n - 1 = 4`.
+
+```text
+3.962 / 4
+
+0.9 x 4 = 3.6 (kurang)
+1.0 x 4 = 4.0 (lebih)
+0.9905 x 4 = 3.962 (pas)
+
+jadi 3.962 / 4 = 0.991
+```
+
+$$
+r=\frac{3.962}{4}=0.991
+$$
+
+$$
+S=\begin{bmatrix}1 & 0.991 \\ 0.991 & 1\end{bmatrix}
+$$
+
+E dan F naik turun bersama dengan sangat kuat.
+
+### 29.4 Langkah 4: PC1 dan eigenvalue
+
+Dua fitur naik bersama, jadi arah PC1:
+
+Arah mentahnya gampang: kalau E naik dan F juga naik, arah kasarnya `[1, 1]`. Tapi PCA butuh panjang vektor menjadi 1.
+
+```text
+panjang [1, 1] = sqrt(1^2 + 1^2)
+= sqrt(1 + 1)
+= sqrt(2)
+
+1.4^2 = 1.96 (kurang)
+1.5^2 = 2.25 (lebih)
+1.414^2 = 1.999396 (pas ke 2.000)
+
+jadi panjangnya kira-kira 1.414
+```
+
+Sekarang bagi tiap komponen dengan panjang itu.
+
+```text
+1 / 1.414
+
+0.7 x 1.414 = 0.9898 (kurang)
+0.71 x 1.414 = 1.00394 (lebih)
+0.707 x 1.414 = 0.999698 (pas ke 1.000)
+
+jadi 1 / 1.414 = 0.707
+```
+
+$$
+p_1=[0.707,0.707]
+$$
+
+Eigenvalue PC1 untuk dua fitur yang korelasinya `r` adalah `1 + r`.
+
+```text
+1 + 0.991 = 1.991
+```
+
+$$
+\lambda_1=1+r=1+0.991=1.991
+$$
+
+### 29.5 Langkah 5: score t tiap window
+
+Rumus `t = z_E*0.707 + z_F*0.707`.
+
+Kita pecah `0.707` menjadi `0.7 + 0.007`.
+
+```text
+W1:
+-1.265 x 0.707
+= -(1.265 x 0.7 + 1.265 x 0.007)
+= -(0.8855 + 0.008855)
+= -0.894355
+
+-1.342 x 0.707
+= -(1.342 x 0.7 + 1.342 x 0.007)
+= -(0.9394 + 0.009394)
+= -0.948794
+
+t = -0.894355 + -0.948794
+t = -1.843149
+t = -1.843
+```
+
+```text
+W2:
+-0.633 x 0.707
+= -(0.633 x 0.7 + 0.633 x 0.007)
+= -(0.4431 + 0.004431)
+= -0.447531
+
+-0.447 x 0.707
+= -(0.447 x 0.7 + 0.447 x 0.007)
+= -(0.3129 + 0.003129)
+= -0.316029
+
+t = -0.447531 + -0.316029
+t = -0.763560
+t = -0.764
+```
+
+```text
+W3:
+0.000 x 0.707 = 0.000
+0.000 x 0.707 = 0.000
+t = 0.000
+```
+
+```text
+W4:
+0.633 x 0.707
+= 0.633 x 0.7 + 0.633 x 0.007
+= 0.4431 + 0.004431
+= 0.447531
+
+0.447 x 0.707
+= 0.447 x 0.7 + 0.447 x 0.007
+= 0.3129 + 0.003129
+= 0.316029
+
+t = 0.447531 + 0.316029
+t = 0.763560
+t = 0.764
+```
+
+```text
+W5:
+1.265 x 0.707
+= 1.265 x 0.7 + 1.265 x 0.007
+= 0.8855 + 0.008855
+= 0.894355
+
+1.342 x 0.707
+= 1.342 x 0.7 + 1.342 x 0.007
+= 0.9394 + 0.009394
+= 0.948794
+
+t = 0.894355 + 0.948794
+t = 1.843149
+t = 1.843
+```
+
+| Window | $z_E$ | $z_F$ | $t$ |
+|---:|---:|---:|---:|
+| W1 | -1.265 | -1.342 | -1.843 |
+| W2 | -0.633 | -0.447 | -0.764 |
+| W3 | 0.000 | 0.000 | 0.000 |
+| W4 | 0.633 | 0.447 | 0.764 |
+| W5 | 1.265 | 1.342 | 1.843 |
+
+### 29.6 Langkah 6: rekonstruksi dan residual
+
+Rumus `z_hat = t * 0.707` untuk tiap fitur, lalu `e = z - z_hat`.
+
+Karena PC1 punya dua angka yang sama, `z_hat_E` dan `z_hat_F` juga sama.
+
+```text
+W1:
+-1.843 x 0.707
+= -(1.843 x 0.7 + 1.843 x 0.007)
+= -(1.2901 + 0.012901)
+= -1.303001
+= -1.303
+
+e_E = -1.265 - (-1.303) = 0.038
+e_F = -1.342 - (-1.303) = -0.039
+```
+
+```text
+W2:
+-0.764 x 0.707
+= -(0.764 x 0.7 + 0.764 x 0.007)
+= -(0.5348 + 0.005348)
+= -0.540148
+= -0.540
+
+e_E = -0.633 - (-0.540) = -0.093
+e_F = -0.447 - (-0.540) = 0.093
+```
+
+```text
+W3:
+0.000 x 0.707 = 0.000
+
+e_E = 0.000 - 0.000 = 0.000
+e_F = 0.000 - 0.000 = 0.000
+```
+
+```text
+W4:
+0.764 x 0.707
+= 0.764 x 0.7 + 0.764 x 0.007
+= 0.5348 + 0.005348
+= 0.540148
+= 0.540
+
+e_E = 0.633 - 0.540 = 0.093
+e_F = 0.447 - 0.540 = -0.093
+```
+
+```text
+W5:
+1.843 x 0.707
+= 1.843 x 0.7 + 1.843 x 0.007
+= 1.2901 + 0.012901
+= 1.303001
+= 1.303
+
+e_E = 1.265 - 1.303 = -0.038
+e_F = 1.342 - 1.303 = 0.039
+```
+
+| Window | t | z_hat_E | z_hat_F | e_E | e_F |
+|---:|---:|---:|---:|---:|---:|
+| W1 | -1.843 | -1.303 | -1.303 | 0.038 | -0.039 |
+| W2 | -0.764 | -0.540 | -0.540 | -0.093 | 0.093 |
+| W3 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+| W4 | 0.764 | 0.540 | 0.540 | 0.093 | -0.093 |
+| W5 | 1.843 | 1.303 | 1.303 | -0.038 | 0.039 |
+
+Residual kecil semua. Window normal memang menempel garis PC1.
+
+### 29.7 Langkah 7: T2 tiap window dan threshold T2
+
+Rumus `T2 = t^2 / lambda_1`, dengan `lambda_1 = 1.991`.
+
+Kuadrat dulu.
+
+```text
+W1 dan W5:
+1.843^2 = 1.843 x 1.843
+= 1.843 x (1.8 + 0.04 + 0.003)
+= 3.3174 + 0.07372 + 0.005529
+= 3.396649
+= 3.397
+```
+
+```text
+W2 dan W4:
+0.764^2 = 0.764 x 0.764
+= 0.764 x (0.7 + 0.06 + 0.004)
+= 0.5348 + 0.04584 + 0.003056
+= 0.583696
+= 0.584
+```
+
+```text
+W3:
+0.000^2 = 0.000
+```
+
+Sekarang bagi dengan `1.991`.
+
+```text
+Untuk 3.397 / 1.991:
+
+1 x 1.991 = 1.991 (kurang)
+2 x 1.991 = 3.982 (lebih)
+1.706 x 1.991 = 3.396646 (pas ke 3.397)
+
+jadi 3.397 / 1.991 = 1.706
+```
+
+```text
+Untuk 0.584 / 1.991:
+
+0.2 x 1.991 = 0.3982 (kurang)
+0.4 x 1.991 = 0.7964 (lebih)
+0.2933 x 1.991 = 0.5839603 (pas ke 0.584)
+
+jadi 0.584 / 1.991 = 0.293
+```
+
+| Window | t | $t^2$ | $T^2=t^2/1.991$ |
+|---:|---:|---:|---:|
+| W1 | -1.843 | 3.397 | 1.706 |
+| W2 | -0.764 | 0.584 | 0.293 |
+| W3 | 0.000 | 0.000 | 0.000 |
+| W4 | 0.764 | 0.584 | 0.293 |
+| W5 | 1.843 | 3.397 | 1.706 |
+
+Ambil yang paling besar dari kolom T2 training.
+
+```text
+mulai max = 1.706
+bandingkan 0.293 -> tetap 1.706
+bandingkan 0.000 -> tetap 1.706
+bandingkan 0.293 -> tetap 1.706
+bandingkan 1.706 -> tetap 1.706
+```
+
+$$
+\text{threshold}_{T^2}=\max(T^2\ \text{training})=1.706
+$$
+
+### 29.8 Langkah 8: Q tiap window dan threshold Q
+
+Rumus `Q = e_E^2 + e_F^2`.
+
+Kuadrat residual kecil boleh ditulis 6 desimal dulu, baru Q dibulatkan 3 desimal.
+
+```text
+W1:
+0.038^2 = 0.038 x 0.038 = 0.001444
+(-0.039)^2 = 0.039 x 0.039 = 0.001521
+
+Q = 0.001444 + 0.001521
+Q = 0.002965
+Q = 0.003
+```
+
+```text
+W2:
+(-0.093)^2 = 0.093 x 0.093 = 0.008649
+0.093^2 = 0.093 x 0.093 = 0.008649
+
+Q = 0.008649 + 0.008649
+Q = 0.017298
+Q = 0.017
+```
+
+```text
+W3:
+0.000^2 + 0.000^2 = 0.000
+```
+
+```text
+W4:
+0.093^2 = 0.093 x 0.093 = 0.008649
+(-0.093)^2 = 0.093 x 0.093 = 0.008649
+
+Q = 0.008649 + 0.008649
+Q = 0.017298
+Q = 0.017
+```
+
+```text
+W5:
+(-0.038)^2 = 0.038 x 0.038 = 0.001444
+0.039^2 = 0.039 x 0.039 = 0.001521
+
+Q = 0.001444 + 0.001521
+Q = 0.002965
+Q = 0.003
+```
+
+| Window | e_E | e_F | $Q$ |
+|---:|---:|---:|---:|
+| W1 | 0.038 | -0.039 | 0.003 |
+| W2 | -0.093 | 0.093 | 0.017 |
+| W3 | 0.000 | 0.000 | 0.000 |
+| W4 | 0.093 | -0.093 | 0.017 |
+| W5 | -0.038 | 0.039 | 0.003 |
+
+Ambil Q training yang paling besar.
+
+```text
+mulai max = 0.003
+bandingkan 0.017 -> ganti jadi 0.017
+bandingkan 0.000 -> tetap 0.017
+bandingkan 0.017 -> tetap 0.017
+bandingkan 0.003 -> tetap 0.017
+```
+
+$$
+\text{threshold}_Q=\max(Q\ \text{training})=0.017
+$$
+
+### 29.9 Langkah 9: kumpulkan parameter model
+
+Sampai sini model PCA manual sudah jadi. Kunci semua angka ini:
+
+Ini bukan angka baru. Ini cuma kotak bekal. Nanti saat `X_new` datang, kita tidak menghitung mean baru, tidak menghitung standar deviasi baru, dan tidak membuat PCA baru. Kita pakai bekal ini saja.
+
+| Parameter | Nilai |
+|---|---:|
+| `mu_E` | 22 |
+| `s_E` | 1.581 |
+| `mu_F` | 43 |
+| `s_F` | 2.236 |
+| $r$ | 0.991 |
+| $p_1$ | `[0.707, 0.707]` |
+| $\lambda_1$ | 1.991 |
+| $\text{threshold}_{T^2}$ | 1.706 |
+| $\text{threshold}_Q$ | 0.017 |
+
+Cara bacanya:
+
+```text
+untuk standardisasi E, pakai mu_E = 22 dan s_E = 1.581
+untuk standardisasi F, pakai mu_F = 43 dan s_F = 2.236
+untuk proyeksi, pakai p1 = [0.707, 0.707]
+untuk T2, bagi dengan lambda1 = 1.991
+untuk vonis, bandingkan T2 dengan 1.706 dan Q dengan 0.017
+```
+
+### 29.10 Langkah 10: uji window baru sampai keputusan
+
+Window baru `X_new = [26, 42]`. Pakai parameter di atas. Jangan hitung mean atau standar deviasi baru.
+
+Standardisasi:
+
+Untuk E:
+
+```text
+z_E = (26 - 22) / 1.581
+z_E = 4 / 1.581
+
+2 x 1.581 = 3.162 (kurang)
+3 x 1.581 = 4.743 (lebih)
+2.530 x 1.581 = 3.99993 (pas ke 4.000)
+
+jadi z_E = 2.530
+```
+
+$$
+z_E=\frac{26-22}{1.581}=\frac{4}{1.581}=2.530
+$$
+
+Untuk F:
+
+```text
+z_F = (42 - 43) / 2.236
+z_F = -1 / 2.236
+
+0.44 x 2.236 = 0.98384 (kurang)
+0.45 x 2.236 = 1.0062 (lebih)
+0.44723 x 2.236 = 1.000006 (pas ke 1.000)
+
+jadi z_F = -0.447
+```
+
+$$
+z_F=\frac{42-43}{2.236}=\frac{-1}{2.236}=-0.447
+$$
+
+$$
+z_{\text{new}}=[2.530,-0.447]
+$$
+
+E jauh di atas rata-rata, F sedikit di bawah rata-rata. Tanda awal hubungan rusak.
+
+Proyeksi ke PC1:
+
+Pakai `0.707 = 0.7 + 0.007`.
+
+```text
+2.530 x 0.707
+= 2.530 x 0.7 + 2.530 x 0.007
+= 1.771 + 0.01771
+= 1.78871
+= 1.789
+```
+
+```text
+-0.447 x 0.707
+= -(0.447 x 0.7 + 0.447 x 0.007)
+= -(0.3129 + 0.003129)
+= -0.316029
+= -0.316
+```
+
+```text
+t_new = 1.78871 + (-0.316029)
+t_new = 1.472681
+t_new = 1.473
+```
+
+$$
+t_{\text{new}}=(2.530)(0.707)+(-0.447)(0.707)=1.789+(-0.316)=1.473
+$$
+
+T2:
+
+Kuadratkan `t_new` dulu.
+
+```text
+1.473^2 = 1.473 x 1.473
+= 1.473 x (1.4 + 0.07 + 0.003)
+= 2.0622 + 0.10311 + 0.004419
+= 2.169729
+= 2.170
+```
+
+Lalu bagi dengan `lambda_1 = 1.991`.
+
+```text
+2.170 / 1.991
+
+1 x 1.991 = 1.991 (kurang)
+1.2 x 1.991 = 2.3892 (lebih)
+1.090 x 1.991 = 2.17019 (pas ke 2.170)
+
+jadi T2_new = 1.090
+```
+
+$$
+T^2_{\text{new}}=\frac{(1.473)^2}{1.991}=\frac{2.170}{1.991}=1.090
+$$
+
+Bandingkan dengan threshold T2.
+
+```text
+threshold_T2 = 1.706
+
+1.090 lebih kecil dari 1.706
+jadi 1.090 > 1.706 adalah False
+```
+
+$$
+1.090>1.706\ \text{adalah False}
+$$
+
+Dari T2 saja, window ini lolos. Belum terlalu jauh di sepanjang jalan normal.
+
+Rekonstruksi dan residual:
+
+Hitung `z_hat` dari `t_new * p1`.
+
+```text
+1.473 x 0.707
+= 1.473 x 0.7 + 1.473 x 0.007
+= 1.0311 + 0.010311
+= 1.041411
+= 1.041
+```
+
+Karena dua komponen `p1` sama-sama `0.707`, dua hasil rekonstruksi juga sama.
+
+$$
+\hat z_{\text{new}}=1.473[0.707,0.707]=[1.041,1.041]
+$$
+
+Sekarang residual, yaitu `z asli - z_hat`.
+
+```text
+e_E = 2.530 - 1.041 = 1.489
+e_F = -0.447 - 1.041 = -1.488
+```
+
+$$
+e_{\text{new}}=[2.530,-0.447]-[1.041,1.041]=[1.489,-1.488]
+$$
+
+Q:
+
+Kuadratkan residual satu-satu.
+
+```text
+1.489^2 = 1.489 x 1.489
+= 1.489 x (1.4 + 0.08 + 0.009)
+= 2.0846 + 0.11912 + 0.013401
+= 2.217121
+= 2.217
+```
+
+```text
+(-1.488)^2 = 1.488 x 1.488
+= 1.488 x (1.4 + 0.08 + 0.008)
+= 2.0832 + 0.11904 + 0.011904
+= 2.214144
+= 2.214
+```
+
+Jumlahkan.
+
+```text
+Q_new = 2.217 + 2.214
+Q_new = 4.431
+```
+
+$$
+Q_{\text{new}}=(1.489)^2+(-1.488)^2=2.217+2.214=4.431
+$$
+
+Bandingkan dengan threshold Q.
+
+```text
+threshold_Q = 0.017
+
+4.431 jauh lebih besar dari 0.017
+jadi 4.431 > 0.017 adalah True
+```
+
+$$
+4.431>0.017\ \text{adalah True}
+$$
+
+Keputusan dengan aturan OR:
+
+```text
+T2 flag = False
+Q flag = True
+
+False OR True = True
+```
+
+$$
+\mathrm{is\_anomaly}=(1.090>1.706)\ \mathrm{OR}\ (4.431>0.017)=\mathrm{False}\ \mathrm{OR}\ \mathrm{True}=\mathrm{True}
+$$
+
+Skor gabungan:
+
+Untuk skor T2:
+
+```text
+score_T2 = 1.090 / 1.706
+
+0.6 x 1.706 = 1.0236 (kurang)
+0.7 x 1.706 = 1.1942 (lebih)
+0.639 x 1.706 = 1.090134 (pas ke 1.090)
+
+jadi score_T2 = 0.639
+```
+
+$$
+\text{score}_{T^2}=\frac{1.090}{1.706}=0.639
+$$
+
+Untuk skor Q:
+
+```text
+score_Q = 4.431 / 0.017
+
+200 x 0.017 = 3.4 (kurang)
+300 x 0.017 = 5.1 (lebih)
+260.647 x 0.017 = 4.430999 (pas ke 4.431)
+
+jadi score_Q = 260.647
+```
+
+$$
+\text{score}_Q=\frac{4.431}{0.017}=260.647
+$$
+
+Ambil skor paling besar.
+
+```text
+bandingkan 0.639 dan 260.647
+260.647 lebih besar
+
+score = 260.647
+```
+
+$$
+\text{score}=\max(0.639,260.647)=260.647
+$$
+
+Vonis: anomali, karena Q, bukan karena T2.
+
+Bahasa operator:
+
+```text
+Window ini tidak terlalu jauh di sepanjang pola normal, jadi T2 masih lolos.
+Tetapi window keluar jauh dari pola normal, jadi Q sangat besar.
+Energi band tinggi, frekuensi dominan tidak ikut naik seperti kebiasaan normal.
+```
+
+Kalau kamu bisa mengikuti sepuluh langkah ini sampai vonis, kamu sudah bisa menghitung bareng. Sekarang giliranmu mengerjakan sendiri di Bagian 30.
+
+## Bagian 30. Latihan soal berkunci
+
+Pola belajarnya lengkap sekarang. Bagian 10 sampai 19 adalah contoh yang dikerjakan penulis. Bagian 29 tadi kita kerjakan bersama. Sekarang giliranmu.
+
+Kerjakan dulu di kertas sampai selesai. Kunci jawaban ada tepat di bawah tiap latihan. Jangan diintip sebelum mencoba.
+
+| Latihan | Data normal | Window baru | Cerita | Kunci |
+|---|---|---|---|---|
+| Latihan 1 | E 6 sampai 10, F 20 sampai 24 | `X_new = 11, 21` | calon anomali | bagian 30.8 |
+| Latihan 2 | E 30 sampai 38, F 60 sampai 67 | `X_new = 35, 65` | calon normal | bagian 30.10 |
+
+### 30.1 Data latihan 1
 
 Data normal baru:
 
@@ -4028,14 +6304,14 @@ Window baru:
 
 Petunjuk rasa: $X_{\text{new}}$ punya energi tinggi tetapi frekuensi tidak ikut tinggi. Kalau pola normalnya naik bersama, Q kemungkinan akan menjadi sinyal penting.
 
-### 29.2 Tabel kerja mean dan standar deviasi
+### 30.2 Tabel kerja mean dan standar deviasi
 
 | Fitur | sum | n | mean | sum kuadrat deviation | variance sample | std sample |
 |---|---:|---:|---:|---:|---:|---:|
 | E |  | 5 |  |  |  |  |
 | F |  | 5 |  |  |  |  |
 
-### 29.3 Tabel kerja z-score
+### 30.3 Tabel kerja z-score
 
 | Window | $E$ | $z_E$ | $F$ | $z_F$ |
 |---:|---:|---:|---:|---:|
@@ -4045,7 +6321,7 @@ Petunjuk rasa: $X_{\text{new}}$ punya energi tinggi tetapi frekuensi tidak ikut 
 | W4 | 9 |  | 22 |  |
 | W5 | 10 |  | 24 |  |
 
-### 29.4 Tabel kerja correlation
+### 30.4 Tabel kerja correlation
 
 | Window | $z_E$ | $z_F$ | z_E * z_F |
 |---:|---:|---:|---:|
@@ -4062,7 +6338,7 @@ p1 =
 lambda_1 =
 ```
 
-### 29.5 Tabel kerja training PCA
+### 30.5 Tabel kerja training PCA
 
 | Window | $z_E$ | $z_F$ | t | z_hat_E | z_hat_F | e_E | e_F | T2 | Q |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -4077,7 +6353,7 @@ threshold_T2 =
 threshold_Q =
 ```
 
-### 29.6 Tabel kerja inference
+### 30.6 Tabel kerja inference
 
 | Langkah | Hasil |
 |---|---:|
@@ -4104,7 +6380,7 @@ Keputusan:
 | Penyebab utama T2 atau Q? |  |
 | Satu kalimat alasan |  |
 
-### 29.7 Latihan konsep tanpa angka
+### 30.7 Latihan konsep tanpa angka
 
 Isi dengan $T^2$, $Q$, atau `T2 dan Q`.
 
@@ -4116,7 +6392,1403 @@ Isi dengan $T^2$, $Q$, atau `T2 dan Q`.
 | Energi tinggi tetapi frekuensi rendah |  |
 | Titik dekat pusat dan dekat garis |  |
 
-## Bagian 30. Penutup
+### 30.8 Kunci jawaban Latihan 1
+
+Bandingkan hasilmu dengan kunci ini. Kalau beda tipis di digit terakhir, biasanya hanya pembulatan.
+
+Kita hitung pelan-pelan. Ini versi raw, seperti anak kecil meraba angka. Angka akhir tetap yang di tabel.
+
+Mean dan standar deviasi:
+
+```text
+E:
+sum jalan:
+6
+6 + 7 = 13
+13 + 8 = 21
+21 + 9 = 30
+30 + 10 = 40
+
+40 / 5:
+5 x 7 = 35 (kurang)
+5 x 8 = 40 (pas)
+mean E = 8
+```
+
+Deviasi E dari mean 8:
+
+```text
+W1: 6 - 8 = -2
+W2: 7 - 8 = -1
+W3: 8 - 8 = 0
+W4: 9 - 8 = 1
+W5: 10 - 8 = 2
+
+kuadrat:
+(-2)^2 = 2 x 2 = 4
+(-1)^2 = 1 x 1 = 1
+0^2 = 0
+1^2 = 1
+2^2 = 4
+
+sum d^2 jalan:
+4
+4 + 1 = 5
+5 + 0 = 5
+5 + 1 = 6
+6 + 4 = 10
+```
+
+```text
+variance E = 10 / (5 - 1) = 10 / 4
+
+10 / 4:
+4 x 2 = 8 (kurang)
+4 x 2.5 = 10 (pas)
+variance E = 2.5
+```
+
+Akar standar deviasi E:
+
+```text
+sqrt(2.5), coba kuadrat:
+1^2 = 1 (kurang)
+2^2 = 4 (lebih)
+
+1.5^2 = 1.5 x (1 + 0.5)
+      = 1.5 + 0.75
+      = 2.25 (kurang)
+
+1.6^2 = 1.6 x (1 + 0.6)
+      = 1.6 + 0.96
+      = 2.56 (lebih)
+
+1.58^2 = 1.58 x (1 + 0.5 + 0.08)
+       = 1.58 + 0.79 + 0.1264
+       = 2.4964 (kurang)
+
+1.581^2 = 1.581 x (1 + 0.5 + 0.08 + 0.001)
+        = 1.581 + 0.7905 + 0.12648 + 0.001581
+        = 2.499561 (pas dekat)
+std E = 1.581
+```
+
+```text
+F:
+sum jalan:
+20
+20 + 21 = 41
+41 + 22 = 63
+63 + 22 = 85
+85 + 24 = 109
+
+109 / 5:
+5 x 21 = 105 (kurang)
+5 x 21.8 = 109 (pas)
+mean F = 21.8
+```
+
+Deviasi F dari mean 21.8:
+
+```text
+W1: 20 - 21.8 = -1.8
+W2: 21 - 21.8 = -0.8
+W3: 22 - 21.8 = 0.2
+W4: 22 - 21.8 = 0.2
+W5: 24 - 21.8 = 2.2
+
+kuadrat:
+1.8^2 = 1.8 x (1 + 0.8)
+      = 1.8 + 1.44
+      = 3.24
+
+0.8^2 = 0.8 x 0.8 = 0.64
+
+0.2^2 = 0.2 x 0.2 = 0.04
+0.2^2 = 0.2 x 0.2 = 0.04
+
+2.2^2 = 2.2 x (2 + 0.2)
+      = 4.4 + 0.44
+      = 4.84
+
+sum d^2 jalan:
+3.24
+3.24 + 0.64 = 3.88
+3.88 + 0.04 = 3.92
+3.92 + 0.04 = 3.96
+3.96 + 4.84 = 8.80
+```
+
+```text
+variance F = 8.8 / (5 - 1) = 8.8 / 4
+
+8.8 / 4:
+4 x 2 = 8 (kurang)
+4 x 2.2 = 8.8 (pas)
+variance F = 2.2
+```
+
+Akar standar deviasi F:
+
+```text
+sqrt(2.2), coba kuadrat:
+1^2 = 1 (kurang)
+2^2 = 4 (lebih)
+
+1.4^2 = 1.4 x (1 + 0.4)
+      = 1.4 + 0.56
+      = 1.96 (kurang)
+
+1.5^2 = 1.5 x (1 + 0.5)
+      = 1.5 + 0.75
+      = 2.25 (lebih)
+
+1.48^2 = 1.48 x (1 + 0.4 + 0.08)
+       = 1.48 + 0.592 + 0.1184
+       = 2.1904 (kurang)
+
+1.483^2 = 1.483 x (1 + 0.4 + 0.08 + 0.003)
+        = 1.483 + 0.5932 + 0.11864 + 0.004449
+        = 2.199289 (pas dekat)
+std F = 1.483
+```
+
+Tabel hasil akhirnya:
+
+| Fitur | sum | n | mean | sum d^2 | variance | std |
+|---|---:|---:|---:|---:|---:|---:|
+| E | 40 | 5 | 8 | 10 | 2.5 | 1.581 |
+| F | 109 | 5 | 21.8 | 8.8 | 2.2 | 1.483 |
+
+Z-score:
+
+Rumus kecilnya:
+
+$$
+z=\frac{x-\text{mean}}{\text{std}}
+$$
+
+Untuk E:
+
+```text
+W1: (6 - 8) / 1.581 = -2 / 1.581
+
+2 / 1.581:
+1.581 x 1.2 = 1.8972 (kurang)
+1.581 x 1.26 = 1.99206 (kurang)
+1.581 x 1.265 = 1.999965 (pas)
+z_E W1 = -1.265
+
+W2: (7 - 8) / 1.581 = -1 / 1.581
+
+1 / 1.581:
+1.581 x 0.6 = 0.9486 (kurang)
+1.581 x 0.63 = 0.99603 (kurang)
+1.581 x 0.633 = 1.000773 (pas dekat, dibulatkan)
+z_E W2 = -0.633
+
+W3: (8 - 8) / 1.581 = 0 / 1.581 = 0.000
+
+W4 sama jarak dengan W2 tetapi positif:
+z_E W4 = 0.633
+
+W5 sama jarak dengan W1 tetapi positif:
+z_E W5 = 1.265
+```
+
+Untuk F:
+
+```text
+W1: (20 - 21.8) / 1.483 = -1.8 / 1.483
+
+1.8 / 1.483:
+1.483 x 1.2 = 1.7796 (kurang)
+1.483 x 1.21 = 1.79443 (kurang)
+1.483 x 1.214 = 1.800362 (pas dekat)
+z_F W1 = -1.214
+
+W2: (21 - 21.8) / 1.483 = -0.8 / 1.483
+
+0.8 / 1.483:
+1.483 x 0.5 = 0.7415 (kurang)
+1.483 x 0.54 = 0.80082 (lebih sedikit)
+1.483 x 0.539 = 0.799337 (pas dekat)
+z_F W2 = -0.539
+
+W3: (22 - 21.8) / 1.483 = 0.2 / 1.483
+
+0.2 / 1.483:
+1.483 x 0.13 = 0.19279 (kurang)
+1.483 x 0.135 = 0.200205 (pas dekat)
+z_F W3 = 0.135
+
+W4 sama dengan W3:
+z_F W4 = 0.135
+
+W5: (24 - 21.8) / 1.483 = 2.2 / 1.483
+
+2.2 / 1.483:
+1.483 x 1.4 = 2.0762 (kurang)
+1.483 x 1.48 = 2.19484 (kurang)
+1.483 x 1.483 = 2.199289 (pas dekat, dibulatkan)
+z_F W5 = 1.483
+```
+
+Tabel hasil akhirnya:
+
+| Window | $z_E$ | $z_F$ |
+|---:|---:|---:|
+| W1 | -1.265 | -1.214 |
+| W2 | -0.633 | -0.539 |
+| W3 | 0.000 | 0.135 |
+| W4 | 0.633 | 0.135 |
+| W5 | 1.265 | 1.483 |
+
+Correlation dan PC1:
+
+Kalikan satu-satu dulu. Ini perkalian nilai tempat.
+
+```text
+W1:
+(-1.265) x (-1.214) = positif
+1.214 x (1 + 0.2 + 0.06 + 0.005)
+= 1.214 + 0.2428 + 0.07284 + 0.00607
+= 1.53571
+
+W2:
+(-0.633) x (-0.539) = positif
+0.539 x (0.6 + 0.03 + 0.003)
+= 0.3234 + 0.01617 + 0.001617
+= 0.341187
+
+W3:
+0.000 x 0.135 = 0
+
+W4:
+0.633 x 0.135
+0.135 x (0.6 + 0.03 + 0.003)
+= 0.081 + 0.00405 + 0.000405
+= 0.085455
+
+W5:
+1.265 x 1.483
+1.483 x (1 + 0.2 + 0.06 + 0.005)
+= 1.483 + 0.2966 + 0.08898 + 0.007415
+= 1.875995
+```
+
+Penjumlahan running:
+
+```text
+1.535710
+1.535710 + 0.341187 = 1.876897
+1.876897 + 0 = 1.876897
+1.876897 + 0.085455 = 1.962352
+1.962352 + 1.875995 = 3.838347
+```
+
+```text
+r = 3.838347 / (5 - 1) = 3.838347 / 4
+
+3.838347 / 4:
+4 x 0.95 = 3.8 (kurang)
+4 x 0.959 = 3.836 (kurang)
+4 x 0.960 = 3.840 (pas dekat)
+r = 0.960
+```
+
+Untuk dua fitur yang geraknya searah, PC1-nya garis tengah:
+
+$$
+p_1=[0.707,0.707]
+$$
+
+Eigenvalue pertama:
+
+```text
+lambda_1 = 1 + r
+lambda_1 = 1 + 0.960 = 1.960
+```
+
+$$
+r=0.960,\quad p_1=[0.707,0.707],\quad \lambda_1=1.960
+$$
+
+Training PCA:
+
+Score $t$ itu z ditempel ke arah PC1.
+
+$$
+t=z_E(0.707)+z_F(0.707)=(z_E+z_F)(0.707)
+$$
+
+```text
+W1:
+z_E + z_F = -1.265 + (-1.214) = -2.479
+2.479 x 0.707 = 2.479 x (0.7 + 0.007)
+              = 1.7353 + 0.017353
+              = 1.752653
+t = -1.753
+
+W2:
+-0.633 + (-0.539) = -1.172
+1.172 x 0.707 = 1.172 x (0.7 + 0.007)
+              = 0.8204 + 0.008204
+              = 0.828604
+t = -0.829
+
+W3:
+0.000 + 0.135 = 0.135
+0.135 x 0.707 = 0.135 x (0.7 + 0.007)
+              = 0.0945 + 0.000945
+              = 0.095445
+t = 0.095
+
+W4:
+0.633 + 0.135 = 0.768
+0.768 x 0.707 = 0.768 x (0.7 + 0.007)
+              = 0.5376 + 0.005376
+              = 0.542976
+t = 0.543
+
+W5:
+1.265 + 1.483 = 2.748
+2.748 x 0.707 = 2.748 x (0.7 + 0.007)
+              = 1.9236 + 0.019236
+              = 1.942836
+t = 1.943
+```
+
+Rekonstruksi $z_{\text{hat}}=t \times 0.707$. Karena PC1 punya dua angka sama, `z_hat_E` dan `z_hat_F` sama.
+
+```text
+W1:
+-1.753 x 0.707
+1.753 x (0.7 + 0.007) = 1.2271 + 0.012271 = 1.239371
+z_hat = -1.239
+
+W2:
+-0.829 x 0.707
+0.829 x (0.7 + 0.007) = 0.5803 + 0.005803 = 0.586103
+z_hat = -0.586
+
+W3:
+0.095 x 0.707
+0.095 x (0.7 + 0.007) = 0.0665 + 0.000665 = 0.067165
+z_hat = 0.067
+
+W4:
+0.543 x 0.707
+0.543 x (0.7 + 0.007) = 0.3801 + 0.003801 = 0.383901
+z_hat = 0.384
+
+W5:
+1.943 x 0.707
+1.943 x (0.7 + 0.007) = 1.3601 + 0.013601 = 1.373701
+z_hat = 1.374
+```
+
+Residual itu sisa: `e = z - z_hat`.
+
+```text
+W1:
+e_E = -1.265 - (-1.239) = -0.026
+e_F = -1.214 - (-1.239) = 0.025
+
+W2:
+e_E = -0.633 - (-0.586) = -0.047
+e_F = -0.539 - (-0.586) = 0.047
+
+W3:
+e_E = 0.000 - 0.067 = -0.067
+e_F = 0.135 - 0.067 = 0.068
+
+W4:
+e_E = 0.633 - 0.384 = 0.249
+e_F = 0.135 - 0.384 = -0.249
+
+W5:
+e_E = 1.265 - 1.374 = -0.109
+e_F = 1.483 - 1.374 = 0.109
+```
+
+Sekarang $T^2=t^2/\lambda_1$. Kuadrat dulu, lalu bagi.
+
+```text
+W1:
+1.753^2 = 1.753 x (1 + 0.7 + 0.05 + 0.003)
+        = 1.753 + 1.2271 + 0.08765 + 0.005259
+        = 3.073009
+
+3.073009 / 1.960:
+1.960 x 1.56 = 3.0576 (kurang)
+1.960 x 1.568 = 3.07328 (pas dekat)
+T2 = 1.568
+
+W2:
+0.829^2 = 0.829 x (0.8 + 0.02 + 0.009)
+        = 0.6632 + 0.01658 + 0.007461
+        = 0.687241
+
+0.687241 / 1.960:
+1.960 x 0.35 = 0.686 (kurang)
+1.960 x 0.351 = 0.68796 (pas dekat)
+T2 = 0.351
+
+W3:
+0.095^2 = 0.095 x (0.09 + 0.005)
+        = 0.00855 + 0.000475
+        = 0.009025
+
+0.009025 / 1.960:
+1.960 x 0.004 = 0.00784 (kurang)
+1.960 x 0.005 = 0.00980 (pas dekat)
+T2 = 0.005
+
+W4:
+0.543^2 = 0.543 x (0.5 + 0.04 + 0.003)
+        = 0.2715 + 0.02172 + 0.001629
+        = 0.294849
+
+0.294849 / 1.960:
+1.960 x 0.15 = 0.294 (pas dekat)
+T2 = 0.150
+
+W5:
+1.943^2 = 1.943 x (1 + 0.9 + 0.04 + 0.003)
+        = 1.943 + 1.7487 + 0.07772 + 0.005829
+        = 3.775249
+
+3.775249 / 1.960:
+1.960 x 1.92 = 3.7632 (kurang)
+1.960 x 1.926 = 3.77496 (pas dekat)
+T2 = 1.926
+```
+
+Sekarang $Q=e_E^2+e_F^2$. Ini sisa kuadrat, kecil-kecil saja.
+
+```text
+W1:
+(-0.026)^2 = 0.000676
+0.025^2 = 0.000625
+Q = 0.000676 + 0.000625 = 0.001301 = 0.001
+
+W2:
+(-0.047)^2 = 0.002209
+0.047^2 = 0.002209
+Q = 0.002209 + 0.002209 = 0.004418 = 0.004
+
+W3:
+(-0.067)^2 = 0.004489
+0.068^2 = 0.004624
+Q = 0.004489 + 0.004624 = 0.009113 = 0.009
+
+W4:
+0.249^2 = 0.249 x (0.2 + 0.04 + 0.009)
+        = 0.0498 + 0.00996 + 0.002241
+        = 0.062001
+(-0.249)^2 = 0.062001
+Q = 0.062001 + 0.062001 = 0.124002 = 0.124
+
+W5:
+(-0.109)^2 = 0.011881
+0.109^2 = 0.011881
+Q = 0.011881 + 0.011881 = 0.023762 = 0.024
+```
+
+Tabel hasil akhirnya:
+
+| Window | t | z_hat_E | z_hat_F | e_E | e_F | T2 | Q |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| W1 | -1.753 | -1.239 | -1.239 | -0.026 | 0.025 | 1.568 | 0.001 |
+| W2 | -0.829 | -0.586 | -0.586 | -0.047 | 0.047 | 0.351 | 0.004 |
+| W3 | 0.095 | 0.067 | 0.067 | -0.067 | 0.068 | 0.005 | 0.009 |
+| W4 | 0.543 | 0.384 | 0.384 | 0.249 | -0.249 | 0.150 | 0.124 |
+| W5 | 1.943 | 1.374 | 1.374 | -0.109 | 0.109 | 1.926 | 0.024 |
+
+Threshold:
+
+Ambil nilai terbesar dari training.
+
+```text
+T2 jalan:
+max awal W1 = 1.568
+banding W2 0.351, tetap 1.568
+banding W3 0.005, tetap 1.568
+banding W4 0.150, tetap 1.568
+banding W5 1.926, naik jadi 1.926
+
+Q jalan:
+max awal W1 = 0.001
+banding W2 0.004, naik jadi 0.004
+banding W3 0.009, naik jadi 0.009
+banding W4 0.124, naik jadi 0.124
+banding W5 0.024, tetap 0.124
+```
+
+$$
+\text{threshold}_{T^2}=1.926,\quad \text{threshold}_Q=0.124
+$$
+
+Inference `X_new = [11, 21]`:
+
+Z-score window baru:
+
+```text
+z_E_new = (11 - 8) / 1.581 = 3 / 1.581
+
+3 / 1.581:
+1.581 x 1.8 = 2.8458 (kurang)
+1.581 x 1.89 = 2.98809 (kurang)
+1.581 x 1.898 = 3.000738 (pas dekat)
+z_E_new = 1.898
+
+z_F_new = (21 - 21.8) / 1.483 = -0.8 / 1.483
+
+0.8 / 1.483:
+1.483 x 0.53 = 0.78599 (kurang)
+1.483 x 0.539 = 0.799337 (pas dekat)
+z_F_new = -0.539
+```
+
+Score baru:
+
+```text
+z_E_new + z_F_new = 1.898 + (-0.539) = 1.359
+
+t_new = 1.359 x 0.707
+1.359 x (0.7 + 0.007)
+= 0.9513 + 0.009513
+= 0.960813
+t_new = 0.961
+```
+
+$T^2$ baru:
+
+```text
+0.961^2 = 0.961 x (0.9 + 0.06 + 0.001)
+        = 0.8649 + 0.05766 + 0.000961
+        = 0.923521
+
+0.923521 / 1.960:
+1.960 x 0.47 = 0.9212 (kurang)
+1.960 x 0.471 = 0.92316 (pas dekat)
+T2_new = 0.471
+```
+
+Rekonstruksi baru:
+
+```text
+z_hat_new = t_new x 0.707
+0.961 x (0.7 + 0.007)
+= 0.6727 + 0.006727
+= 0.679427
+z_hat_E_new = 0.679
+z_hat_F_new = 0.679
+```
+
+Residual baru:
+
+```text
+e_E_new = 1.898 - 0.679 = 1.219
+e_F_new = -0.539 - 0.679 = -1.218
+```
+
+$Q$ baru:
+
+```text
+1.219^2 = 1.219 x (1 + 0.2 + 0.01 + 0.009)
+        = 1.219 + 0.2438 + 0.01219 + 0.010971
+        = 1.485961
+
+1.218^2 = 1.218 x (1 + 0.2 + 0.01 + 0.008)
+        = 1.218 + 0.2436 + 0.01218 + 0.009744
+        = 1.483524
+
+Q_new = 1.485961 + 1.483524 = 2.969485 = 2.969
+```
+
+Skor terhadap threshold:
+
+```text
+score_T2 = 0.471 / 1.926
+
+0.471 / 1.926:
+1.926 x 0.24 = 0.46224 (kurang)
+1.926 x 0.245 = 0.47187 (pas dekat)
+score_T2 = 0.245
+
+score_Q = 2.969 / 0.124
+
+2.969 / 0.124:
+0.124 x 20 = 2.480 (kurang)
+0.124 x 23 = 2.852 (kurang)
+0.124 x 23.944 = 2.969056 (pas dekat)
+score_Q = 23.944
+```
+
+Tabel hasil akhirnya:
+
+| Langkah | Hasil |
+|---|---:|
+| `z_E_new` | 1.898 |
+| `z_F_new` | -0.539 |
+| $t_{\text{new}}$ | 0.961 |
+| $T^2_{\text{new}}$ | 0.471 |
+| `z_hat_E_new` | 0.679 |
+| `z_hat_F_new` | 0.679 |
+| `e_E_new` | 1.219 |
+| `e_F_new` | -1.218 |
+| $Q_{\text{new}}$ | 2.969 |
+| $\text{score}_{T^2}$ | 0.245 |
+| $\text{score}_Q$ | 23.944 |
+
+Keputusan:
+
+```text
+T2_new kecil:
+0.471 masih di bawah 1.926
+
+Q_new besar:
+2.969 jauh di atas 0.124
+```
+
+| Pertanyaan | Jawaban |
+|---|---|
+| `T2_new > threshold_T2`? | 0.471 > 1.926 = False |
+| `Q_new > threshold_Q`? | 2.969 > 0.124 = True |
+| Normal atau anomali? | anomali |
+| Penyebab utama | Q |
+| Satu kalimat alasan | energi naik tetapi frekuensi tidak ikut, jadi window keluar dari pola normal |
+
+Kunci 30.7, latihan konsep tanpa angka:
+
+| Situasi | Skor yang kemungkinan naik |
+|---|---|
+| Window jauh di sepanjang pola normal | T2 |
+| Window keluar dari pola normal | Q |
+| Energi dan frekuensi sama-sama sangat tinggi, masih searah | T2 |
+| Energi tinggi tetapi frekuensi rendah | Q |
+| Titik dekat pusat dan dekat garis | tidak ada, T2 dan Q sama-sama rendah |
+
+### 30.9 Latihan 2, kasus yang mungkin normal
+
+Latihan ini sengaja berbeda. Window barunya mengikuti pola normal, jadi kamu belajar rasa "lolos", bukan hanya rasa "anomali".
+
+Data normal:
+
+| Window | E | F |
+|---:|---:|---:|
+| W1 | 30 | 60 |
+| W2 | 32 | 63 |
+| W3 | 34 | 64 |
+| W4 | 36 | 66 |
+| W5 | 38 | 67 |
+
+Window baru:
+
+| Window | E | F |
+|---|---:|---:|
+| X_new | 35 | 65 |
+
+Petunjuk rasa: energi `35` dan frekuensi `65` dua-duanya berada di tengah atas, naik bersama seperti pola normal. Kemungkinan besar T2 dan Q sama-sama lolos.
+
+Worksheet mean dan standar deviasi:
+
+| Fitur | sum | n | mean | sum d^2 | variance | std |
+|---|---:|---:|---:|---:|---:|---:|
+| E |  | 5 |  |  |  |  |
+| F |  | 5 |  |  |  |  |
+
+Worksheet z-score:
+
+| Window | $E$ | $z_E$ | $F$ | $z_F$ |
+|---:|---:|---:|---:|---:|
+| W1 | 30 |  | 60 |  |
+| W2 | 32 |  | 63 |  |
+| W3 | 34 |  | 64 |  |
+| W4 | 36 |  | 66 |  |
+| W5 | 38 |  | 67 |  |
+
+Worksheet correlation:
+
+| Window | $z_E$ | $z_F$ | z_E * z_F |
+|---:|---:|---:|---:|
+| W1 |  |  |  |
+| W2 |  |  |  |
+| W3 |  |  |  |
+| W4 |  |  |  |
+| W5 |  |  |  |
+| Jumlah |  |  |  |
+
+```text
+r =
+p1 =
+lambda_1 =
+```
+
+Worksheet training PCA:
+
+| Window | $z_E$ | $z_F$ | t | z_hat_E | z_hat_F | e_E | e_F | T2 | Q |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| W1 |  |  |  |  |  |  |  |  |  |
+| W2 |  |  |  |  |  |  |  |  |  |
+| W3 |  |  |  |  |  |  |  |  |  |
+| W4 |  |  |  |  |  |  |  |  |  |
+| W5 |  |  |  |  |  |  |  |  |  |
+
+```text
+threshold_T2 =
+threshold_Q =
+```
+
+Worksheet inference:
+
+| Langkah | Hasil |
+|---|---:|
+| `z_E_new` |  |
+| `z_F_new` |  |
+| $t_{\text{new}}$ |  |
+| $T^2_{\text{new}}$ |  |
+| `z_hat_E_new` |  |
+| `z_hat_F_new` |  |
+| `e_E_new` |  |
+| `e_F_new` |  |
+| $Q_{\text{new}}$ |  |
+| $\text{score}_{T^2}$ |  |
+| $\text{score}_Q$ |  |
+| $\text{score}$ |  |
+
+### 30.10 Kunci jawaban Latihan 2
+
+Sekarang kasus yang rasanya normal. Tetap kita raba angka satu-satu, jangan lompat.
+
+Mean dan standar deviasi:
+
+```text
+E:
+sum jalan:
+30
+30 + 32 = 62
+62 + 34 = 96
+96 + 36 = 132
+132 + 38 = 170
+
+170 / 5:
+5 x 30 = 150 (kurang)
+5 x 34 = 170 (pas)
+mean E = 34
+```
+
+Deviasi E dari mean 34:
+
+```text
+W1: 30 - 34 = -4
+W2: 32 - 34 = -2
+W3: 34 - 34 = 0
+W4: 36 - 34 = 2
+W5: 38 - 34 = 4
+
+kuadrat:
+(-4)^2 = 4 x 4 = 16
+(-2)^2 = 2 x 2 = 4
+0^2 = 0
+2^2 = 4
+4^2 = 16
+
+sum d^2 jalan:
+16
+16 + 4 = 20
+20 + 0 = 20
+20 + 4 = 24
+24 + 16 = 40
+```
+
+```text
+variance E = 40 / (5 - 1) = 40 / 4
+
+40 / 4:
+4 x 9 = 36 (kurang)
+4 x 10 = 40 (pas)
+variance E = 10
+```
+
+Akar standar deviasi E:
+
+```text
+sqrt(10), coba kuadrat:
+3^2 = 9 (kurang)
+4^2 = 16 (lebih)
+
+3.1^2 = 3.1 x (3 + 0.1)
+      = 9.3 + 0.31
+      = 9.61 (kurang)
+
+3.2^2 = 3.2 x (3 + 0.2)
+      = 9.6 + 0.64
+      = 10.24 (lebih)
+
+3.16^2 = 3.16 x (3 + 0.1 + 0.06)
+       = 9.48 + 0.316 + 0.1896
+       = 9.9856 (kurang)
+
+3.162^2 = 3.162 x (3 + 0.1 + 0.06 + 0.002)
+        = 9.486 + 0.3162 + 0.18972 + 0.006324
+        = 9.998244 (pas dekat)
+std E = 3.162
+```
+
+```text
+F:
+sum jalan:
+60
+60 + 63 = 123
+123 + 64 = 187
+187 + 66 = 253
+253 + 67 = 320
+
+320 / 5:
+5 x 60 = 300 (kurang)
+5 x 64 = 320 (pas)
+mean F = 64
+```
+
+Deviasi F dari mean 64:
+
+```text
+W1: 60 - 64 = -4
+W2: 63 - 64 = -1
+W3: 64 - 64 = 0
+W4: 66 - 64 = 2
+W5: 67 - 64 = 3
+
+kuadrat:
+(-4)^2 = 16
+(-1)^2 = 1
+0^2 = 0
+2^2 = 4
+3^2 = 9
+
+sum d^2 jalan:
+16
+16 + 1 = 17
+17 + 0 = 17
+17 + 4 = 21
+21 + 9 = 30
+```
+
+```text
+variance F = 30 / (5 - 1) = 30 / 4
+
+30 / 4:
+4 x 7 = 28 (kurang)
+4 x 7.5 = 30 (pas)
+variance F = 7.5
+```
+
+Akar standar deviasi F:
+
+```text
+sqrt(7.5), coba kuadrat:
+2^2 = 4 (kurang)
+3^2 = 9 (lebih)
+
+2.7^2 = 2.7 x (2 + 0.7)
+      = 5.4 + 1.89
+      = 7.29 (kurang)
+
+2.8^2 = 2.8 x (2 + 0.8)
+      = 5.6 + 2.24
+      = 7.84 (lebih)
+
+2.73^2 = 2.73 x (2 + 0.7 + 0.03)
+       = 5.46 + 1.911 + 0.0819
+       = 7.4529 (kurang)
+
+2.739^2 = 2.739 x (2 + 0.7 + 0.03 + 0.009)
+        = 5.478 + 1.9173 + 0.08217 + 0.024651
+        = 7.502121 (pas dekat)
+std F = 2.739
+```
+
+Tabel hasil akhirnya:
+
+| Fitur | sum | n | mean | sum d^2 | variance | std |
+|---|---:|---:|---:|---:|---:|---:|
+| E | 170 | 5 | 34 | 40 | 10 | 3.162 |
+| F | 320 | 5 | 64 | 30 | 7.5 | 2.739 |
+
+Z-score:
+
+Untuk E:
+
+```text
+W1: (30 - 34) / 3.162 = -4 / 3.162
+
+4 / 3.162:
+3.162 x 1.2 = 3.7944 (kurang)
+3.162 x 1.26 = 3.98412 (kurang)
+3.162 x 1.265 = 3.99993 (pas)
+z_E W1 = -1.265
+
+W2: (32 - 34) / 3.162 = -2 / 3.162
+
+2 / 3.162:
+3.162 x 0.6 = 1.8972 (kurang)
+3.162 x 0.63 = 1.99206 (kurang)
+3.162 x 0.633 = 2.001546 (pas dekat, dibulatkan)
+z_E W2 = -0.633
+
+W3: (34 - 34) / 3.162 = 0 / 3.162 = 0.000
+
+W4 sama jarak dengan W2 tetapi positif:
+z_E W4 = 0.633
+
+W5 sama jarak dengan W1 tetapi positif:
+z_E W5 = 1.265
+```
+
+Untuk F:
+
+```text
+W1: (60 - 64) / 2.739 = -4 / 2.739
+
+4 / 2.739:
+2.739 x 1.4 = 3.8346 (kurang)
+2.739 x 1.46 = 3.99894 (pas dekat)
+z_F W1 = -1.460
+
+W2: (63 - 64) / 2.739 = -1 / 2.739
+
+1 / 2.739:
+2.739 x 0.36 = 0.98604 (kurang)
+2.739 x 0.365 = 0.999735 (pas dekat)
+z_F W2 = -0.365
+
+W3: (64 - 64) / 2.739 = 0 / 2.739 = 0.000
+
+W4: (66 - 64) / 2.739 = 2 / 2.739
+
+2 / 2.739:
+2.739 x 0.7 = 1.9173 (kurang)
+2.739 x 0.73 = 1.99947 (pas dekat)
+z_F W4 = 0.730
+
+W5: (67 - 64) / 2.739 = 3 / 2.739
+
+3 / 2.739:
+2.739 x 1.09 = 2.98551 (kurang)
+2.739 x 1.095 = 2.999205 (pas dekat)
+z_F W5 = 1.095
+```
+
+Tabel hasil akhirnya:
+
+| Window | $z_E$ | $z_F$ |
+|---:|---:|---:|
+| W1 | -1.265 | -1.460 |
+| W2 | -0.633 | -0.365 |
+| W3 | 0.000 | 0.000 |
+| W4 | 0.633 | 0.730 |
+| W5 | 1.265 | 1.095 |
+
+Correlation dan PC1:
+
+Kalikan z_E dan z_F per window.
+
+```text
+W1:
+(-1.265) x (-1.460) = positif
+1.460 x (1 + 0.2 + 0.06 + 0.005)
+= 1.460 + 0.292 + 0.0876 + 0.0073
+= 1.8469
+
+W2:
+(-0.633) x (-0.365) = positif
+0.365 x (0.6 + 0.03 + 0.003)
+= 0.219 + 0.01095 + 0.001095
+= 0.231045
+
+W3:
+0.000 x 0.000 = 0
+
+W4:
+0.633 x 0.730
+0.730 x (0.6 + 0.03 + 0.003)
+= 0.438 + 0.0219 + 0.00219
+= 0.462090
+
+W5:
+1.265 x 1.095
+1.095 x (1 + 0.2 + 0.06 + 0.005)
+= 1.095 + 0.219 + 0.0657 + 0.005475
+= 1.385175
+```
+
+Penjumlahan running:
+
+```text
+1.846900
+1.846900 + 0.231045 = 2.077945
+2.077945 + 0 = 2.077945
+2.077945 + 0.462090 = 2.540035
+2.540035 + 1.385175 = 3.925210
+```
+
+```text
+r = 3.925210 / (5 - 1) = 3.925210 / 4
+
+3.925210 / 4:
+4 x 0.98 = 3.92 (kurang)
+4 x 0.981 = 3.924 (pas dekat)
+r = 0.981
+```
+
+PC1 masih garis tengah karena dua fitur naik bareng:
+
+$$
+p_1=[0.707,0.707]
+$$
+
+```text
+lambda_1 = 1 + r
+lambda_1 = 1 + 0.981 = 1.981
+```
+
+$$
+r=0.981,\quad p_1=[0.707,0.707],\quad \lambda_1=1.981
+$$
+
+Training PCA:
+
+Score $t$:
+
+```text
+W1:
+z_E + z_F = -1.265 + (-1.460) = -2.725
+2.725 x 0.707 = 2.725 x (0.7 + 0.007)
+              = 1.9075 + 0.019075
+              = 1.926575
+t = -1.927
+
+W2:
+-0.633 + (-0.365) = -0.998
+0.998 x 0.707 = 0.998 x (0.7 + 0.007)
+              = 0.6986 + 0.006986
+              = 0.705586
+t = -0.706
+
+W3:
+0.000 + 0.000 = 0.000
+t = 0.000
+
+W4:
+0.633 + 0.730 = 1.363
+1.363 x 0.707 = 1.363 x (0.7 + 0.007)
+              = 0.9541 + 0.009541
+              = 0.963641
+t = 0.964
+
+W5:
+1.265 + 1.095 = 2.360
+2.360 x 0.707 = 2.360 x (0.7 + 0.007)
+              = 1.652 + 0.01652
+              = 1.66852
+t = 1.669
+```
+
+Rekonstruksi $z_{\text{hat}}=t \times 0.707$:
+
+```text
+W1:
+-1.927 x 0.707
+1.927 x (0.7 + 0.007) = 1.3489 + 0.013489 = 1.362389
+z_hat = -1.362
+
+W2:
+-0.706 x 0.707
+0.706 x (0.7 + 0.007) = 0.4942 + 0.004942 = 0.499142
+z_hat = -0.499
+
+W3:
+0.000 x 0.707 = 0.000
+z_hat = 0.000
+
+W4:
+0.964 x 0.707
+0.964 x (0.7 + 0.007) = 0.6748 + 0.006748 = 0.681548
+z_hat = 0.682
+
+W5:
+1.669 x 0.707
+1.669 x (0.7 + 0.007) = 1.1683 + 0.011683 = 1.179983
+z_hat = 1.180
+```
+
+Residual:
+
+```text
+W1:
+e_E = -1.265 - (-1.362) = 0.097
+e_F = -1.460 - (-1.362) = -0.098
+
+W2:
+e_E = -0.633 - (-0.499) = -0.134
+e_F = -0.365 - (-0.499) = 0.134
+
+W3:
+e_E = 0.000 - 0.000 = 0.000
+e_F = 0.000 - 0.000 = 0.000
+
+W4:
+e_E = 0.633 - 0.682 = -0.049
+e_F = 0.730 - 0.682 = 0.048
+
+W5:
+e_E = 1.265 - 1.180 = 0.085
+e_F = 1.095 - 1.180 = -0.085
+```
+
+$T^2=t^2/\lambda_1$:
+
+```text
+W1:
+1.927^2 = 1.927 x (1 + 0.9 + 0.02 + 0.007)
+        = 1.927 + 1.7343 + 0.03854 + 0.013489
+        = 3.713329
+
+3.713329 / 1.981:
+1.981 x 1.87 = 3.70447 (kurang)
+1.981 x 1.874 = 3.712394 (pas dekat)
+T2 = 1.874
+
+W2:
+0.706^2 = 0.706 x (0.7 + 0.006)
+        = 0.4942 + 0.004236
+        = 0.498436
+
+0.498436 / 1.981:
+1.981 x 0.25 = 0.49525 (kurang)
+1.981 x 0.252 = 0.499212 (pas dekat)
+T2 = 0.252
+
+W3:
+0.000^2 = 0.000
+T2 = 0.000
+
+W4:
+0.964^2 = 0.964 x (0.9 + 0.06 + 0.004)
+        = 0.8676 + 0.05784 + 0.003856
+        = 0.929296
+
+0.929296 / 1.981:
+1.981 x 0.46 = 0.91126 (kurang)
+1.981 x 0.469 = 0.929089 (pas dekat)
+T2 = 0.469
+
+W5:
+1.669^2 = 1.669 x (1 + 0.6 + 0.06 + 0.009)
+        = 1.669 + 1.0014 + 0.10014 + 0.015021
+        = 2.785561
+
+2.785561 / 1.981:
+1.981 x 1.40 = 2.7734 (kurang)
+1.981 x 1.406 = 2.785286 (pas dekat)
+T2 = 1.406
+```
+
+$Q=e_E^2+e_F^2$:
+
+```text
+W1:
+0.097^2 = 0.009409
+(-0.098)^2 = 0.009604
+Q = 0.009409 + 0.009604 = 0.019013 = 0.019
+
+W2:
+(-0.134)^2 = 0.017956
+0.134^2 = 0.017956
+Q = 0.017956 + 0.017956 = 0.035912 = 0.036
+
+W3:
+0.000^2 + 0.000^2 = 0.000
+
+W4:
+(-0.049)^2 = 0.002401
+0.048^2 = 0.002304
+Q = 0.002401 + 0.002304 = 0.004705 = 0.005
+
+W5:
+0.085^2 = 0.007225
+(-0.085)^2 = 0.007225
+Q = 0.007225 + 0.007225 = 0.014450 = 0.014
+```
+
+Tabel hasil akhirnya:
+
+| Window | t | z_hat_E | z_hat_F | e_E | e_F | T2 | Q |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| W1 | -1.927 | -1.362 | -1.362 | 0.097 | -0.098 | 1.874 | 0.019 |
+| W2 | -0.706 | -0.499 | -0.499 | -0.134 | 0.134 | 0.252 | 0.036 |
+| W3 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+| W4 | 0.964 | 0.682 | 0.682 | -0.049 | 0.048 | 0.469 | 0.005 |
+| W5 | 1.669 | 1.180 | 1.180 | 0.085 | -0.085 | 1.406 | 0.014 |
+
+Threshold:
+
+```text
+T2 jalan:
+max awal W1 = 1.874
+banding W2 0.252, tetap 1.874
+banding W3 0.000, tetap 1.874
+banding W4 0.469, tetap 1.874
+banding W5 1.406, tetap 1.874
+
+Q jalan:
+max awal W1 = 0.019
+banding W2 0.036, naik jadi 0.036
+banding W3 0.000, tetap 0.036
+banding W4 0.005, tetap 0.036
+banding W5 0.014, tetap 0.036
+```
+
+$$
+\text{threshold}_{T^2}=1.874,\quad \text{threshold}_Q=0.036
+$$
+
+Inference `X_new = [35, 65]`:
+
+Z-score window baru:
+
+```text
+z_E_new = (35 - 34) / 3.162 = 1 / 3.162
+
+1 / 3.162:
+3.162 x 0.3 = 0.9486 (kurang)
+3.162 x 0.316 = 0.999192 (pas dekat)
+z_E_new = 0.316
+
+z_F_new = (65 - 64) / 2.739 = 1 / 2.739
+
+1 / 2.739:
+2.739 x 0.36 = 0.98604 (kurang)
+2.739 x 0.365 = 0.999735 (pas dekat)
+z_F_new = 0.365
+```
+
+Score baru:
+
+```text
+z_E_new + z_F_new = 0.316 + 0.365 = 0.681
+
+t_new = 0.681 x 0.707
+0.681 x (0.7 + 0.007)
+= 0.4767 + 0.004767
+= 0.481467
+t_new = 0.481
+```
+
+$T^2$ baru:
+
+```text
+0.481^2 = 0.481 x (0.4 + 0.08 + 0.001)
+        = 0.1924 + 0.03848 + 0.000481
+        = 0.231361
+
+0.231361 / 1.981:
+1.981 x 0.11 = 0.21791 (kurang)
+1.981 x 0.117 = 0.231777 (pas dekat)
+T2_new = 0.117
+```
+
+Rekonstruksi baru:
+
+```text
+z_hat_new = 0.481 x 0.707
+0.481 x (0.7 + 0.007)
+= 0.3367 + 0.003367
+= 0.340067
+z_hat_E_new = 0.340
+z_hat_F_new = 0.340
+```
+
+Residual baru:
+
+```text
+e_E_new = 0.316 - 0.340 = -0.024
+e_F_new = 0.365 - 0.340 = 0.025
+```
+
+$Q$ baru:
+
+```text
+(-0.024)^2 = 0.000576
+0.025^2 = 0.000625
+
+Q_new = 0.000576 + 0.000625
+Q_new = 0.001201 = 0.001
+```
+
+Skor terhadap threshold:
+
+```text
+score_T2 = 0.117 / 1.874
+
+0.117 / 1.874:
+1.874 x 0.06 = 0.11244 (kurang)
+1.874 x 0.062 = 0.116188 (pas dekat)
+score_T2 = 0.062
+
+score_Q = 0.001 / 0.036
+
+0.001 / 0.036:
+0.036 x 0.02 = 0.00072 (kurang)
+0.036 x 0.028 = 0.001008 (pas dekat)
+score_Q = 0.028
+
+score akhir = max(0.062, 0.028) = 0.062
+```
+
+Tabel hasil akhirnya:
+
+| Langkah | Hasil |
+|---|---:|
+| `z_E_new` | 0.316 |
+| `z_F_new` | 0.365 |
+| $t_{\text{new}}$ | 0.481 |
+| $T^2_{\text{new}}$ | 0.117 |
+| `z_hat_E_new` | 0.340 |
+| `z_hat_F_new` | 0.340 |
+| `e_E_new` | -0.024 |
+| `e_F_new` | 0.025 |
+| $Q_{\text{new}}$ | 0.001 |
+| $\text{score}_{T^2}$ | 0.062 |
+| $\text{score}_Q$ | 0.028 |
+| $\text{score}$ | 0.062 |
+
+Keputusan:
+
+```text
+T2_new kecil:
+0.117 masih di bawah 1.874
+
+Q_new kecil:
+0.001 masih di bawah 0.036
+
+Dua-duanya lolos.
+```
+
+| Pertanyaan | Jawaban |
+|---|---|
+| `T2_new > threshold_T2`? | 0.117 > 1.874 = False |
+| `Q_new > threshold_Q`? | 0.001 > 0.036 = False |
+| Normal atau anomali? | normal |
+| Penyebab utama | tidak ada, dua skor lolos |
+| Satu kalimat alasan | energi dan frekuensi naik bersama mengikuti pola normal, jadi T2 dan Q kecil |
+
+Karena `score = 0.062` lebih kecil dari 1, window ini normal. Inilah rasa window sehat: tidak jauh di jalan, tidak keluar dari jalan.
+
+## Bagian 31. Penutup
 
 PCA T2/Q terlihat seperti model matematika besar, tetapi hitungan manualnya bisa dipahami sebagai rangkaian langkah kecil.
 
