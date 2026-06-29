@@ -12,7 +12,7 @@ OUTLINE = ROOT / 'docs/presentation/deck-outline.md'
 def test_deck_outline_has_expected_slide_contract():
     text = OUTLINE.read_text(encoding='utf-8')
 
-    assert text.count('## Slide ') == 13
+    assert text.count('## Slide ') == 27
     assert 'SKAB dipakai sebagai surrogate water-circulation testbed' in text
     assert 'local Docker Compose evidence' in text
     for screenshot in CANONICAL_SCREENSHOTS:
@@ -30,7 +30,7 @@ def test_generated_pptx_is_structurally_valid(tmp_path):
         assert archive.testzip() is None
 
     presentation = Presentation(str(output))
-    assert len(presentation.slides) == len(SLIDES) == 13
+    assert len(presentation.slides) == len(SLIDES) == 27
 
     text = '\n'.join(
         _shape_text(shape)
@@ -48,7 +48,7 @@ def test_committed_deck_artifact_exists_after_generation():
 
     presentation = Presentation(str(OUTPUT_PATH))
 
-    assert len(presentation.slides) == 13
+    assert len(presentation.slides) == 27
 
 
 def _shape_text(shape: object) -> str:
