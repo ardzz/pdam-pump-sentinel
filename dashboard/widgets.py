@@ -60,7 +60,7 @@ def operator_action_buttons(anomaly_payload: dict[str, Any], station: str) -> No
     iso_ts = _event_iso_ts(anomaly_payload)
     ack_payload = {
         '_ts': iso_ts,
-        'operator': 'dashboard',
+        'operator_id': 'dashboard',
         'ack_at': datetime.now(timezone.utc).isoformat(),
         'note': 'Acked from UI',
     }
@@ -73,7 +73,7 @@ def operator_action_buttons(anomaly_payload: dict[str, Any], station: str) -> No
     with c2:
         if st.button('Mute 15m', key=f'mute-{button_suffix}'):
             until_ts = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
-            mute_payload = {'until_ts': until_ts, 'operator': 'dashboard', 'reason': 'Muted from UI'}
+            mute_payload = {'until_ts': until_ts, 'operator_id': 'dashboard', 'reason': 'Muted from UI'}
             _write_operator_action('mute', station, mute_payload, 15 * 60, 'Muted station for 15 minutes.')
     with c3:
         note_key = f'note-open-{button_suffix}'
@@ -85,11 +85,11 @@ def operator_action_buttons(anomaly_payload: dict[str, Any], station: str) -> No
         if st.button('Submit note', key=f'submit-note-{button_suffix}'):
             note_payload = {
                 '_ts': iso_ts,
-                'operator': 'dashboard',
+                'operator_id': 'dashboard',
                 'ack_at': datetime.now(timezone.utc).isoformat(),
                 'note': note or 'Operator note submitted from UI',
             }
-            _write_operator_action('ack', station, note_payload, ACK_TTL_SECONDS, 'Saved operator note.')
+            _write_operator_action('note', station, note_payload, ACK_TTL_SECONDS, 'Saved operator note.')
 
 
 def collect_status_checks(station: str | None = None) -> dict[str, tuple[bool, str]]:
@@ -105,14 +105,16 @@ def collect_status_checks(station: str | None = None) -> dict[str, tuple[bool, s
 
 def _write_operator_action(kind: str, station: str, payload: dict[str, Any], ttl_seconds: int, success_message: str) -> None:
     try:
-        ok = data.record_operator_action(kind, station, payload, ttl_seconds)
+        result = data.record_operator_action(kind, station, payload, ttl_seconds)
     except Exception as exc:
         st.error(f'Operator action failed: {exc}')
         return
-    if ok:
-        st.success(success_message)
-    else:
+    if not result.ok:
         st.error('Operator action failed. Redis is unavailable.')
+        return
+    st.success(success_message)
+    if not result.history_ok:
+        st.warning('Action applied to live state, but durable history could not be recorded.')
 
 
 def _probe_mlflow() -> tuple[bool, str]:

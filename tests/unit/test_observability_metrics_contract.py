@@ -18,6 +18,7 @@ from app.observability.metrics import (
     MODEL_INFO,
     OBSERVABILITY_BUILD_INFO,
     OBSERVABILITY_SCHEMA_VERSION,
+    OPERATOR_ACTION_STATE,
     PERSISTENCE_WRITES,
     RETRAIN_DURATION,
     RETRAINING_JOBS,
@@ -91,6 +92,9 @@ def test_metrics_exist_with_expected_names_and_labels() -> None:
 
     assert _public_metric_name(OBSERVABILITY_BUILD_INFO) == 'pumpad_observability_build_info'
     assert tuple(OBSERVABILITY_BUILD_INFO._labelnames) == ('schema_version',)
+
+    assert _public_metric_name(OPERATOR_ACTION_STATE) == 'pumpad_operator_action_state'
+    assert tuple(OPERATOR_ACTION_STATE._labelnames) == ('station', 'action_type')
 
 
 def test_set_model_info_resets_to_latest_labelset() -> None:
@@ -169,6 +173,8 @@ def test_render_prometheus_client_metrics_exposes_pumpad_families() -> None:
     DRIFT_REPORT_AGE.set(30)
     RETRAIN_DURATION.labels(result='promoted').observe(10)
     ACTIVE_MODEL_AGE.labels(name='PumpAD', version='6', alias='champion').set(60)
+    OPERATOR_ACTION_STATE.clear()
+    OPERATOR_ACTION_STATE.labels(station='ipa_01', action_type='ack').set(1)
 
     text = render_prometheus_client_metrics().decode('utf-8')
 
@@ -186,6 +192,7 @@ def test_render_prometheus_client_metrics_exposes_pumpad_families() -> None:
     assert 'pumpad_retrain_duration_seconds_bucket' in text
     assert 'pumpad_active_model_age_seconds' in text
     assert 'pumpad_observability_build_info' in text
+    assert 'pumpad_operator_action_state' in text
     assert OBSERVABILITY_SCHEMA_VERSION in text
 
 
@@ -226,6 +233,32 @@ def test_refresh_metrics_from_redis_state_uses_payload_evidence_without_fake_lat
     assert DRIFT_REPORT_AGE._value.get() >= 0.0
     assert 'pumpad_retrain_duration_seconds_sum{result="promoted"} 12.5' in text
     assert ('ipa_01', '2') not in INFERENCE_LATENCY._metrics
+
+
+def test_refresh_metrics_exposes_operator_action_state_from_redis(monkeypatch) -> None:
+    payloads = {
+        'pumpad:anomaly:ack:ipa_01:2026-06-08T00:00:00+00:00': {'action_type': 'ack'},
+        'pumpad:anomaly:mute:ipa_01': {'action_type': 'mute'},
+        'pumpad:anomaly:note:ipa_01:2026-06-08T00:00:00+00:00': {'action_type': 'note'},
+    }
+    monkeypatch.setitem(sys.modules, 'redis', FakeRedisModule(payloads))
+    OPERATOR_ACTION_STATE.clear()
+    OPERATOR_ACTION_STATE.labels(station='ipa_99', action_type='ack').set(1)
+
+    metrics.refresh_metrics_from_redis_state()
+    text = render_prometheus_client_metrics().decode('utf-8')
+
+    assert ('ipa_01', 'ack') in OPERATOR_ACTION_STATE._metrics
+    assert ('ipa_01', 'mute') in OPERATOR_ACTION_STATE._metrics
+    assert ('ipa_01', 'note') in OPERATOR_ACTION_STATE._metrics
+    assert OPERATOR_ACTION_STATE.labels(station='ipa_01', action_type='ack')._value.get() == 1.0
+    assert OPERATOR_ACTION_STATE.labels(station='ipa_01', action_type='mute')._value.get() == 1.0
+    assert OPERATOR_ACTION_STATE.labels(station='ipa_01', action_type='note')._value.get() == 1.0
+    assert ('ipa_99', 'ack') not in OPERATOR_ACTION_STATE._metrics
+    assert 'pumpad_operator_action_state' in text
+    for series in OPERATOR_ACTION_STATE._metrics:
+        assert series[0] == 'ipa_01'
+        assert series[1] in ('ack', 'mute', 'note')
 
 
 def _public_metric_name(metric: Any) -> str:

@@ -20,7 +20,7 @@ Capture sequence aligned with `design.md §13.1` storyboard and the portfolio ob
 | `grafana-routemq` | http://localhost:13000/d/pumpad-observability/pdam-pump-sentinel-routemq-observability?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | RouteMQ observability dashboard in kiosk mode |
 | `grafana-pipeline-observability` | http://localhost:13000/d/pumpad-observability/pdam-pump-sentinel-routemq-observability?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | Pipeline row: dispatch → inference → persistence |
 | `grafana-mlops` | http://localhost:13000/d/pumpad-mlops/mlops-loop?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | Grafana MLOps loop dashboard |
-| `grafana-mlops-observability` | http://localhost:13000/d/pumpad-mlops/mlops-loop?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | MLOps SLIs: inference events, anomaly severity, drift age, retrain duration, model age |
+| `grafana-mlops-observability` | http://localhost:13000/d/pumpad-mlops/mlops-loop?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | MLOps SLIs plus row `Anomaly alert and operator action evidence` for high severity anomaly rate, `pumpad_operator_action_state`, and recent `operator_actions` |
 | `grafana-system-health` | http://localhost:13000/d/pumpad-system-health/system-health?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | Grafana system health dashboard |
 | `grafana-slo-health` | http://localhost:13000/d/pumpad-system-health/system-health?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | SLO/dependency health: persistence errors and active model freshness |
 | `grafana-mqtt-broker` | http://localhost:13000/d/pumpad-mqtt-broker/mqtt-broker?from=now-1h&to=now&timezone=browser&refresh=10s&kiosk=tv | Grafana MQTT broker clients, throughput, and uptime |
@@ -52,7 +52,7 @@ Storyboard timing matches `scripts/run_e2e_demo.py` phases. T+9 is optional and 
 | After T+5 retrain | `t5-retrain` | `mlflow-experiments mlflow-pumpad` | New experiment run, new PumpAD version row |
 | After T+7 promote | `t7-promote` | `mlflow-pumpad streamlit-model-registry` | Champion alias points to challenger version |
 | After T+8 recover | `t8-recover` | `streamlit-live-sensors streamlit-anomaly-history grafana-routemq` | Dashboard green again, anomaly history shows recovery, observability normalized |
-| After T+9 evidence | `t9-observability` | `grafana-pipeline-observability grafana-mlops-observability grafana-slo-health streamlit-observability-snapshot streamlit-runbook-observability` | Portfolio evidence for the upgraded observability layer |
+| After T+9 evidence | `t9-observability` | `grafana-pipeline-observability grafana-mlops-observability grafana-slo-health streamlit-observability-snapshot streamlit-runbook-observability` | Portfolio evidence for the upgraded observability layer, including Grafana MLOps operator action evidence |
 
 ## Workflow
 
@@ -101,8 +101,10 @@ Captured evidence files:
 - `docs/presentation/screenshots/t9-observability-grafana-pipeline-observability-20260609T130723Z.png`
 - `docs/presentation/screenshots/t9-observability-grafana-mlops-observability-20260609T130723Z.png`
 - `docs/presentation/screenshots/t9-observability-grafana-slo-health-20260609T130723Z.png`
-- `docs/presentation/screenshots/t9-observability-streamlit-observability-snapshot-20260609T130723Z.png`
-- `docs/presentation/screenshots/t9-observability-streamlit-runbook-observability-20260609T130723Z.png`
+- `docs/presentation/screenshots/t9-observability-streamlit-observability-snapshot-20260628T0535Z.png`
+- `docs/presentation/screenshots/t9-observability-streamlit-runbook-observability-20260628T0535Z.png`
+
+For a fresh post-Task-5 capture, the `grafana-mlops-observability` target should include the Grafana MLOps row `Anomaly alert and operator action evidence` with the high severity anomaly rate, `pumpad_operator_action_state`, and recent `operator_actions` panels.
 
 ## Notes
 

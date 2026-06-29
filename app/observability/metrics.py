@@ -86,6 +86,11 @@ ACTIVE_MODEL_AGE = Gauge(
     'Seconds since the active champion model was activated',
     ['name', 'version', 'alias'],
 )
+OPERATOR_ACTION_STATE = Gauge(
+    'pumpad_operator_action_state',
+    'Current operator action state from Redis (1 while an ack/mute/note key is active)',
+    ['station', 'action_type'],
+)
 OBSERVABILITY_BUILD_INFO = Gauge(
     'pumpad_observability_build_info',
     'Observability schema compatibility marker',
@@ -172,8 +177,24 @@ def refresh_metrics_from_redis_state() -> None:
             reading = _redis_json(client, str(key))
             if reading:
                 _record_freshness(station, reading.get('timestamp') or reading.get('observed_at'))
+
+        _refresh_operator_action_state(client)
     except Exception:
         logger.debug('could not refresh observability metrics from Redis state', exc_info=True)
+
+
+def _refresh_operator_action_state(client: Any) -> None:
+    OPERATOR_ACTION_STATE.clear()
+    for action_type in ('ack', 'mute', 'note'):
+        for key in client.scan_iter(match=f'pumpad:anomaly:{action_type}:*', count=20):
+            station = _operator_action_station(str(key))
+            if station:
+                OPERATOR_ACTION_STATE.labels(station=station, action_type=action_type).set(1.0)
+
+
+def _operator_action_station(key: str) -> str:
+    parts = key.split(':')
+    return parts[3] if len(parts) > 3 else ''
 
 
 def _redis_json(client: Any, key: str) -> dict[str, Any] | None:

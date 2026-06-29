@@ -1146,6 +1146,221 @@
       ],
       "title": "Active model age",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "description": "Anomaly alert evidence and operator action history surfaced for portfolio review.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "id": 18,
+      "panels": [],
+      "title": "Anomaly alert and operator action evidence",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "High severity anomaly event rate per station; mirrors the PDAMHighSeverityAnomalyEvents alert rule.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "events/s"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.001
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 47
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (station) (rate(pumpad_anomaly_events_total{severity=\"high\"}[5m]))",
+          "legendFormat": "{{station}} high",
+          "refId": "A"
+        }
+      ],
+      "title": "High severity anomaly rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Current operator action state (ack/mute/note) exported from Redis via the app /metrics endpoint.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "text": "NONE"
+                },
+                "1": {
+                  "color": "blue",
+                  "text": "ACTIVE"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "blue",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 47
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (station, action_type) (pumpad_operator_action_state)",
+          "legendFormat": "{{station}} {{action_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Operator action state",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Most recent operator actions from the append-only ClickHouse operator_actions history.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 47
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "format": "table",
+          "query": "SELECT created_at, station, action_type, source_timestamp, operator_id, note, reason, mute_until FROM operator_actions ORDER BY created_at DESC LIMIT 50",
+          "queryType": "sql",
+          "rawSql": "SELECT created_at, station, action_type, source_timestamp, operator_id, note, reason, mute_until FROM operator_actions ORDER BY created_at DESC LIMIT 50",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent operator actions",
+      "type": "table"
     }
   ],
   "refresh": "10s",

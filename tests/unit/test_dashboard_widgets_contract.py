@@ -17,6 +17,42 @@ class FakeRedis:
         return True
 
 
+class _FakeColumn:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+class FakeStreamlit:
+    def __init__(self, clicked_labels=(), note_text=''):
+        self.clicked = set(clicked_labels)
+        self.note_text = note_text
+        self.session_state: dict[str, object] = {}
+        self.successes: list[str] = []
+        self.warnings: list[str] = []
+        self.errors: list[str] = []
+
+    def columns(self, count):
+        return tuple(_FakeColumn() for _ in range(count))
+
+    def button(self, label, key=None):
+        return label in self.clicked
+
+    def text_input(self, label, key=None):
+        return self.note_text
+
+    def success(self, message):
+        self.successes.append(message)
+
+    def warning(self, message):
+        self.warnings.append(message)
+
+    def error(self, message):
+        self.errors.append(message)
+
+
 @pytest.mark.parametrize(
     ('timestamp', 'threshold', 'expected'),
     [
@@ -37,18 +73,134 @@ def test_freshness_pill_renders_state(monkeypatch, timestamp, threshold, expecte
 def test_record_operator_action_writes_ack_key(monkeypatch):
     fake = FakeRedis()
     monkeypatch.setattr(data, '_redis_client', lambda: fake)
+    monkeypatch.setattr(data, '_record_operator_action_history', lambda *args, **kwargs: True)
 
-    ok = data.record_operator_action(
+    result = data.record_operator_action(
         'ack',
         'ipa_01',
-        {'_ts': '2026-06-06T00:00:00+00:00', 'operator': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'},
+        {'_ts': '2026-06-06T00:00:00+00:00', 'operator_id': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'},
         30,
     )
 
-    assert ok is True
+    assert bool(result) is True
+    assert result.ok is True
+    assert result.history_ok is True
     assert fake.calls[0]['key'] == 'pumpad:anomaly:ack:ipa_01:2026-06-06T00:00:00+00:00'
     assert fake.calls[0]['ex'] == 30
-    assert json.loads(fake.calls[0]['value']) == {'operator': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'}
+    assert json.loads(fake.calls[0]['value']) == {'operator_id': 'dashboard', 'ack_at': 'now', 'note': 'Acked from UI'}
+
+
+def test_write_operator_action_full_success_shows_no_warning(monkeypatch):
+    fake_st = FakeStreamlit()
+    monkeypatch.setattr(widgets, 'st', fake_st)
+    monkeypatch.setattr(
+        data,
+        'record_operator_action',
+        lambda *args, **kwargs: data.OperatorActionResult(ok=True, history_ok=True),
+    )
+
+    widgets._write_operator_action('ack', 'ipa_01', {}, 30, 'Acknowledged anomaly.')
+
+    assert fake_st.successes == ['Acknowledged anomaly.']
+    assert fake_st.warnings == []
+    assert fake_st.errors == []
+
+
+def test_write_operator_action_history_failure_surfaces_warning(monkeypatch):
+    fake_st = FakeStreamlit()
+    monkeypatch.setattr(widgets, 'st', fake_st)
+    monkeypatch.setattr(
+        data,
+        'record_operator_action',
+        lambda *args, **kwargs: data.OperatorActionResult(ok=True, history_ok=False),
+    )
+
+    widgets._write_operator_action('mute', 'ipa_01', {}, 900, 'Muted station for 15 minutes.')
+
+    assert fake_st.successes == ['Muted station for 15 minutes.']
+    assert len(fake_st.warnings) == 1
+    assert fake_st.errors == []
+
+
+def test_write_operator_action_redis_failure_shows_error(monkeypatch):
+    fake_st = FakeStreamlit()
+    monkeypatch.setattr(widgets, 'st', fake_st)
+    monkeypatch.setattr(
+        data,
+        'record_operator_action',
+        lambda *args, **kwargs: data.OperatorActionResult(ok=False, history_ok=False),
+    )
+
+    widgets._write_operator_action('ack', 'ipa_01', {}, 30, 'Acknowledged anomaly.')
+
+    assert fake_st.successes == []
+    assert fake_st.warnings == []
+    assert fake_st.errors == ['Operator action failed. Redis is unavailable.']
+
+
+@pytest.mark.parametrize(
+    ('clicked', 'expected_kind'),
+    [
+        ({'Acknowledge'}, 'ack'),
+        ({'Mute 15m'}, 'mute'),
+        ({'Add note', 'Submit note'}, 'note'),
+    ],
+)
+def test_operator_action_buttons_route_expected_kind(monkeypatch, clicked, expected_kind):
+    captured: list[str] = []
+    monkeypatch.setattr(widgets, '_write_operator_action', lambda kind, *args, **kwargs: captured.append(kind))
+    fake_st = FakeStreamlit(clicked_labels=clicked, note_text='bearing noise')
+    monkeypatch.setattr(widgets, 'st', fake_st)
+
+    widgets.operator_action_buttons({'source_timestamp': '2026-06-06T00:00:00+00:00'}, 'ipa_01')
+
+    assert captured == [expected_kind]
+
+
+def test_operator_action_buttons_submits_note_payload_as_note(monkeypatch):
+    captured: list[tuple[str, str, dict[str, object], int]] = []
+    monkeypatch.setattr(
+        widgets,
+        '_write_operator_action',
+        lambda kind, station, payload, ttl, message: captured.append((kind, station, payload, ttl)),
+    )
+    fake_st = FakeStreamlit(clicked_labels={'Add note', 'Submit note'}, note_text='bearing noise')
+    monkeypatch.setattr(widgets, 'st', fake_st)
+
+    widgets.operator_action_buttons({'source_timestamp': '2026-06-06T00:00:00+00:00'}, 'ipa_01')
+
+    assert len(captured) == 1
+    kind, station, payload, ttl = captured[0]
+    assert kind == 'note'
+    assert station == 'ipa_01'
+    assert payload['note'] == 'bearing noise'
+    assert payload['operator_id'] == 'dashboard'
+    assert ttl == widgets.ACK_TTL_SECONDS
+
+
+@pytest.mark.parametrize(
+    ('clicked', 'expected_kind'),
+    [
+        ({'Acknowledge'}, 'ack'),
+        ({'Mute 15m'}, 'mute'),
+        ({'Add note', 'Submit note'}, 'note'),
+    ],
+)
+def test_operator_action_buttons_payloads_include_operator_id(monkeypatch, clicked, expected_kind):
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        widgets,
+        '_write_operator_action',
+        lambda kind, station, payload, ttl, message: captured.append(payload),
+    )
+    fake_st = FakeStreamlit(clicked_labels=clicked, note_text='bearing noise')
+    monkeypatch.setattr(widgets, 'st', fake_st)
+
+    widgets.operator_action_buttons({'source_timestamp': '2026-06-06T00:00:00+00:00'}, 'ipa_01')
+
+    assert len(captured) == 1
+    assert captured[0]['operator_id'] == 'dashboard'
+    assert 'operator' not in captured[0]
 
 
 @pytest.mark.parametrize(

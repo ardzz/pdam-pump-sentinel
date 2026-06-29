@@ -55,7 +55,30 @@ def test_prometheus_loads_local_pumpad_alert_rules():
         'PDAMPersistenceWriteErrors',
         'PDAMDriftReportStale',
         'PDAMActiveModelStale',
+        'PDAMHighSeverityAnomalyEvents',
     }
+
+
+def test_prometheus_alerts_on_high_severity_anomaly_events():
+    rules = _load_yaml('infra/prometheus/rules/pumpad-alerts.yml')
+    alert = next(
+        rule
+        for group in rules['groups']
+        for rule in group['rules']
+        if rule.get('alert') == 'PDAMHighSeverityAnomalyEvents'
+    )
+
+    assert alert['expr'] == (
+        'sum by (station) (rate(pumpad_anomaly_events_total{severity="high"}[5m])) > 0'
+    )
+    assert 'pumpad_anomaly_events_total{severity="high"}' in alert['expr']
+    assert alert['for'] == '1m'
+    assert alert['labels']['severity'] == 'warning'
+    assert alert['annotations']['summary'] == 'High severity pump anomaly events detected'
+
+    description = alert['annotations']['description'].lower()
+    assert 'runbook' in description
+    assert 'anomaly' in description
 
 
 def test_prometheus_scrapes_mosquitto_exporter():
@@ -120,6 +143,26 @@ def test_grafana_mlops_dashboard_references_new_metrics():
     assert any('pumpad_drift_report_age_seconds' in query for query in queries)
     assert any('pumpad_retrain_duration_seconds' in query for query in queries)
     assert any('pumpad_active_model_age_seconds' in query for query in queries)
+
+
+def test_grafana_mlops_dashboard_shows_operator_action_evidence():
+    dashboard = _load_dashboard('pumpad-mlops.json')
+    queries = _dashboard_queries(dashboard)
+
+    assert any(
+        'sum by (station) (rate(pumpad_anomaly_events_total{severity="high"}[5m]))' in query
+        for query in queries
+    )
+    assert any(
+        'sum by (station, action_type) (pumpad_operator_action_state)' in query
+        for query in queries
+    )
+    assert any('pumpad_operator_action_state' in query for query in queries)
+    assert any(
+        'FROM operator_actions' in query and 'ORDER BY created_at DESC' in query
+        for query in queries
+    )
+    assert not any('0 * sum' in query for query in queries)
 
 
 def test_grafana_system_health_dashboard_references_slo_metrics():

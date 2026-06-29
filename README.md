@@ -47,9 +47,10 @@ Detail lengkap: lihat [`docs/plans/design.md`](docs/plans/design.md).
 Observability yang sudah terimplementasi berada pada stack lokal Docker Compose, bukan klaim deployment produksi cloud/Kubernetes. Bukti teknisnya meliputi:
 
 - Endpoint `/metrics` aplikasi RouteMQ yang menggabungkan metrik framework dan `pumpad_*`.
-- Local Prometheus alert rules untuk app scrape health, telemetry freshness, inference errors, persistence write errors, drift report age, dan active model age.
-- Metrik bounded-label untuk inference, persistence writes, anomaly severity, telemetry freshness, drift report age, retrain duration, active model age, dan observability schema/build marker.
-- Dashboard Grafana `pumpad-observability`, `pumpad-mlops`, `pumpad-system-health`, dan `pumpad-mqtt-broker` untuk membaca pipeline, MLOps SLIs, dependency health, dan broker health.
+- Local Prometheus alert rules untuk app scrape health, telemetry freshness, inference errors, persistence write errors, drift report age, active model age, dan anomaly-specific rule `PDAMHighSeverityAnomalyEvents`.
+- Metrik bounded-label untuk inference, persistence writes, anomaly severity, telemetry freshness, drift report age, retrain duration, active model age, operator action state (`pumpad_operator_action_state`), dan observability schema/build marker.
+- Dashboard Grafana `pumpad-observability`, `pumpad-mlops`, `pumpad-system-health`, dan `pumpad-mqtt-broker` untuk membaca pipeline, MLOps SLIs, dependency health, broker health, dan row `Anomaly alert and operator action evidence`.
+- Bukti operator action tersimpan di ClickHouse `operator_actions`, terlihat sebagai metric `pumpad_operator_action_state`, dan muncul pada panel Grafana MLOps untuk action state serta recent operator actions.
 - Streamlit Overview/System Health/Runbook yang menampilkan `Observability Snapshot`, app metric freshness, service checks, dan triage berbasis metrik.
 - Demo T+0–T+8, optional T+9 observability evidence check, dan target screenshot observability pada [`docs/presentation/screenshot-checklist.md`](docs/presentation/screenshot-checklist.md).
 
